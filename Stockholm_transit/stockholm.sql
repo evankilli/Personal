@@ -1,7 +1,7 @@
 /* 1 Isolate residences */
 
 create table res_osm as
-select "IDK WHAT COLUMNS I WANT YET"
+select osm_id, building, way
 from "GOD KNOWS WHERE"
 where building = 'yes' or building = 'residential'
 
@@ -9,8 +9,8 @@ where building = 'yes' or building = 'residential'
 
 /* 2 Isolate transit stops */
 
-create table sholm_tram as
-select "COLUMN"
+/* create table sholm_tram as
+select osm_id
 from "GOD KNOWS WHERE"
 where railway = 'tram_stop'
 
@@ -23,30 +23,32 @@ create table sholm_rail_transit_area as
 select "column"
 from "GNW"
 where railway = 'station' and type = 'area'
--- option for breaking apart
+-- option for breaking apart */
 
 create table sholm_rail_transit as
-select "column"
+select osm_id, name, railway, public_transport, way
 from "GNW"
 where railway = 'tram_stop' or railway = 'station'
 -- option for keeping together
 
 create table sholm_transit as
-select osm_id, building, way
+select osm_id, name, railway, public_transport, way
 from "GOD KNOWS WHERE"
-where public_transport = 'stop_position'
+where public_transport = 'stop_position' or public_transport = 'station'
 
 --------------------------------------------------------------------------------
 
 /* 3 Isolate stockholm neighborhoods */
 
 create table sholm_hoods as
-select geom, "OTHER COLUMNS"
+select osm_id, name, population, geom "OR WAY????"
 from "GNW"
+where admin level = '10'
 
 -- i know neighborhoods are admin level 10
 -- imma use Stockholms kommun (admin level 7) as my boundaries
 -- i wanna find all the polygons within this so I have stockholm subdivisions
+-- looks like admin level 10 only exists within a subset of cities so I should be fine?
 
 --------------------------------------------------------------------------------
 
@@ -59,11 +61,11 @@ from res_osm
 
 /* Convert stations to centroids */
 create table sholm_rail_centroids as
-  select osm_id, building, ST_CENTROID(way) as geom
+  select osm_id, name, railway, public_transport, ST_CENTROID(way) as geom
   from sholm_rail_transit
 
 create table sholm_transit_centroids as
-  select osm_id, building, ST_CENTROID(way) as geom
+  select osm_id, name public_transport, railway, ST_CENTROID(way) as geom
   from sholm_transit
 
 --------------------------------------------------------------------------------
