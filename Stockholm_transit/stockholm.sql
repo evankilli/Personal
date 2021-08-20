@@ -176,13 +176,13 @@ SET utmgeom = ST_Transform(geom, 32737);
 SELECT addgeometrycolumn('evan','sholm_rail_transit','utmgeom',32737,'POINT',2);
 UPDATE sholm_rail_transit
 SET utmgeom = ST_Transform(geom, 32737);
--- prepare rail for Analysis
+-- prepare rail for analysis
 
 
 SELECT addgeometrycolumn('evan','sholm_transit','utmgeom',32737,'POINT',2);
 UPDATE sholm_transit
 SET utmgeom = ST_Transform(geom, 32737);
--- prepare all transit for Analysis
+-- prepare all transit for analysis
 
 
 SELECT addgeometrycolumn('evan','hood_w_res_cnt','utmgeom',32737,'POLYGON',2);
@@ -199,13 +199,13 @@ UPDATE res_osm_pt
 SET access_rail = 1
 FROM sholm_rail_transit
 WHERE ST_DWITHIN(res_osm_pt.utmgeom, sholm_rail_transit.utmgeom, 402.34);
--- make access equal one when residence is within 1mi/1609.34m of rail transit
+-- make access equal one when residence is within 1/4mi or 402.34m of rail transit
 
 UPDATE res_osm_pt
 SET access_all = 1
 FROM sholm_transit
 WHERE ST_DWITHIN(res_osm_pt.utmgeom, sholm_transit.utmgeom, 402.34);
--- make access equal one when residence is within 1mi/1609.34m of any transit
+-- make access equal one when residence is within 1/4mi or 402.34m of any transit
 
 select *
 from res_osm_pt
