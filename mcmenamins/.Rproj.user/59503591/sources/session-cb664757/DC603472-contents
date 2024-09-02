@@ -11,11 +11,13 @@ knitr::opts_chunk$set(echo = TRUE)
 rm(list = ls())
 ```
 
-```{r load packages}
+```{r load packages and define directory}
 library(librarian)
 
 shelf(tidyverse, data.table, devtools, ggplot2, ggmap, htmltools, htmlwidgets, 
-      readxl, shiny, tibble, sf, tmap, sp)
+      readxl, shiny, tibble, sf, tmap, sp, janitor, hablar)
+
+project_dir = getwd()
 ```
 
 ```{r bring in mcmenamins locations, echo=FALSE}
@@ -138,49 +140,92 @@ table(mcmen_tract$NAMELSAD)
 ```
 
 ```{r import state-level census tables}
-state_housing = read.csv(paste0(project_dir,"/Data/State Tables/ACSST5Y2020.S2504-2024-09-02T025004.csv"), header = FALSE, check.names = FALSE, col.names = )
+#import state level tables
 
-state_race = read.csv(paste0(project_dir,"/Data/State Tables/DECENNIALCD1182020.P9-2024-09-02T020426.csv"), header = FALSE, check.names = FALSE, col.names = )
+state_housing = transpose(read.csv(paste0(project_dir,"/Data/State Tables/ACSST5Y2020.S2504-2024-09-02T025004.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-state_social = read.csv(paste0(project_dir,"/Data/State Tables/ACSDP5Y2020.DP02-2024-09-02T024239.csv"), header = FALSE, check.names = FALSE, col.names = )
+state_race = as.data.frame(transpose(read.csv(paste0(project_dir,"/Data/State Tables/DECENNIALCD1182020.P9-2024-09-02T020426.csv"), header = FALSE, check.names = FALSE, sep = ",", strip.white = TRUE ,col.names = )))
 
-state_econ = read.csv(paste0(project_dir,"/Data/State Tables/ACSDP5Y2020.DP03-2024-09-02T025117.csv"), header = FALSE, check.names = FALSE, col.names = )
+state_social = transpose(read.csv(paste0(project_dir,"/Data/State Tables/ACSDP5Y2020.DP02-2024-09-02T024239.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-state_dem = read.csv(paste0(project_dir,"/Data/State Tables/ACSDP5Y2020.DP05-2024-09-02T024224.csv"), header = FALSE, check.names = FALSE, col.names = )
+state_econ = transpose(read.csv(paste0(project_dir,"/Data/State Tables/ACSDP5Y2020.DP03-2024-09-02T025117.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-state_mob = read.csv(paste0(project_dir,"/Data/State Tables/ACSDT5Y2020.B07003-2024-09-02T020851.csv"), header = FALSE, check.names = FALSE, col.names = )
+state_dem = transpose(read.csv(paste0(project_dir,"/Data/State Tables/ACSDP5Y2020.DP05-2024-09-02T024224.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-state_income = read.csv(paste0(project_dir,"/Data/State Tables/ACSDT5Y2020.B19001-2024-09-02T024917.csv"), header = FALSE, check.names = FALSE, col.names = )
+state_mob = transpose(read.csv(paste0(project_dir,"/Data/State Tables/ACSDT5Y2020.B07003-2024-09-02T020851.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-state_occ = read.csv(paste0(project_dir,"/Data/State Tables/ACSDT5Y2020.B25003-2024-09-02T024941.csv"), header = FALSE, check.names = FALSE, col.names = )
+state_income = transpose(read.csv(paste0(project_dir,"/Data/State Tables/ACSDT5Y2020.B19001-2024-09-02T024917.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-state_lang = read.csv(paste0(project_dir,"/Data/State Tables/ACSST5Y2020.S1601-2024-09-02T020749.csv"), header = FALSE, check.names = FALSE, col.names = )
+state_occ = transpose(read.csv(paste0(project_dir,"/Data/State Tables/ACSDT5Y2020.B25003-2024-09-02T024941.csv"), header = FALSE, check.names = FALSE, col.names = ))
+
+state_lang = transpose(read.csv(paste0(project_dir,"/Data/State Tables/ACSST5Y2020.S1601-2024-09-02T020749.csv"), header = FALSE, check.names = FALSE, col.names = ))
+```
 
 
+```{r process state tab structure}
+#make first row column names
+names(state_housing) <- str_trim(state_housing[1,])
+names(state_race) <- str_trim(state_race[1,])
+names(state_social) <- str_trim(state_social[1,])
+names(state_econ) <- str_trim(state_econ[1,])
+names(state_dem) <- str_trim(state_dem[1,])
+names(state_mob) <- str_trim(state_mob[1,])
+names(state_income) <- str_trim(state_income[1,])
+names(state_occ) <- str_trim(state_occ[1,])
+names(state_lang) <- str_trim(state_lang[1,])
+
+#remove original first row (now column names)
+state_housing = state_housing[-c(1),]
+state_race = state_race[-c(1),]
+state_social = state_social[-c(1),]
+state_econ = state_econ[-c(1),]
+state_dem = state_dem[-c(1),]
+state_mob = state_mob[-c(1),]
+state_income = state_income[-c(1),]
+state_occ = state_occ[-c(1),]
+state_lang = state_lang[-c(1),]
+```
+
+```{r process state-level race table}
+#remove and rename columns
+View(data.frame(colnames(state_race)))
+
+##remove variables
+state_race = state_race %>% 
+  select(-c(`Not Hispanic or Latino:`, `Population of one race:`, `Population of two races:`, `White; Black or African American`, `White; American Indian and Alaska Native`, `White; Asian`, `White; Native Hawaiian and Other Pacific Islander`, `White; Some Other Race`, `Black or African American; American Indian and Alaska Native`, `Black or African American; Asian`, `Black or African American; Native Hawaiian and Other Pacific Islander`, `Black or African American; Some Other Race`, `American Indian and Alaska Native; Asian`, `American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander`, `American Indian and Alaska Native; Some Other Race`, `Asian; Native Hawaiian and Other Pacific Islander`, `Asian; Some Other Race`, `Native Hawaiian and Other Pacific Islander; Some Other Race`, `Population of three races:`, `White; Black or African American; American Indian and Alaska Native`, `White; Black or African American; Asian`, `White; Black or African American; Native Hawaiian and Other Pacific Islander`, `White; Black or African American; Some Other Race`, `White; American Indian and Alaska Native; Asian`, `White; American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander`, `White; American Indian and Alaska Native; Some Other Race`, `White; Asian; Native Hawaiian and Other Pacific Islander`, `White; Asian; Some Other Race`, `White; Native Hawaiian and Other Pacific Islander; Some Other Race`, `Black or African American; American Indian and Alaska Native; Asian`, `Black or African American; American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander`, `Black or African American; American Indian and Alaska Native; Some Other Race`, `Black or African American; Asian; Native Hawaiian and Other Pacific Islander`, `Black or African American; Asian; Some Other Race`, `Black or African American; Native Hawaiian and Other Pacific Islander; Some Other Race`, `American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander`, `American Indian and Alaska Native; Asian; Some Other Race`, `American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander; Some Other Race`, `Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`)) %>% 
+  select(-c(`Population of four races:`, `White; Black or African American; American Indian and Alaska Native; Asian`, `White; Black or African American; American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander`, `White; Black or African American; American Indian and Alaska Native; Some Other Race`, `White; Black or African American; Asian; Native Hawaiian and Other Pacific Islander`, `White; Black or African American; Asian; Some Other Race`, `White; Black or African American; Native Hawaiian and Other Pacific Islander; Some Other Race`, `White; American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander`, `White; American Indian and Alaska Native; Asian; Some Other Race`, `White; American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander; Some Other Race`, `White; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `Black or African American; American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander`, `Black or African American; American Indian and Alaska Native; Asian; Some Other Race`, `Black or African American; American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander; Some Other Race`, `Black or African American; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `Population of five races:`, `White; Black or African American; American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander`, `White; Black or African American; American Indian and Alaska Native; Asian; Some Other Race`, `White; Black or African American; American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander; Some Other Race`, `White; Black or African American; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `White; American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `Black or African American; American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `Population of six races:`, `White; Black or African American; American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`))
+
+##rename variables
+state_race = state_race %>% 
+  rename(state = `Label (Grouping)`, total = `Total:`, hispanic = `Hispanic or Latino`, white_nonh = `White alone`, black_nonh = `Black or African American alone`, amind_nonh = `American Indian and Alaska Native alone`, asian_nonh = `Asian alone`, pacific_nonh = `Native Hawaiian and Other Pacific Islander alone`, other_nonh = `Some Other Race alone`, mult_nonh = `Population of two or more races:`)
+
+#convert pop to numeric
+test = parse_number(state_race$total)
+
+state_race = as.numeric(sub(",", "", state_race$total:state_race$mult_nonh))
 
 ```
 
 ```{r import tract-level census tables}
-#import state level tables
-tract_lang = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSST5Y2020.S1601-2024-09-02T025548.csv"), header = FALSE, check.names = FALSE, col.names = )
+#import tract level tables
 
-tract_housing = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSST5Y2020.S2504-2024-09-02T030714.csv"), header = FALSE, check.names = FALSE, col.names = )
+tract_lang = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSST5Y2020.S1601-2024-09-02T025548.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-tract_race = read.csv(paste0(project_dir,"/Data/Tract Tables/DECENNIALDHC2020.P9-2024-09-02T025304.csv"), header = FALSE, check.names = FALSE, col.names = )
+tract_housing = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSST5Y2020.S2504-2024-09-02T030714.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-tract_social = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP02-2024-09-02T030223.csv"), header = FALSE, check.names = FALSE, col.names = )
+tract_race = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/DECENNIALDHC2020.P9-2024-09-02T025304.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-tract_econ = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP03-2024-09-02T030910.csv"), header = FALSE, check.names = FALSE, col.names = )
+tract_social = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP02-2024-09-02T030223.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-tract_dem = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP05-2024-09-02T030011.csv"), header = FALSE, check.names = FALSE, col.names = )
+tract_econ = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP03-2024-09-02T030910.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-tract_mob = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B07003-2024-09-02T025726.csv"), header = FALSE, check.names = FALSE, col.names = )
+tract_dem = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP05-2024-09-02T030011.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-tract_income = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B19001-2024-09-02T030344.csv"), header = FALSE, check.names = FALSE, col.names = )
+tract_mob = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B07003-2024-09-02T025726.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-tract_occ = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B25003-2024-09-02T030524.csv"), header = FALSE, check.names = FALSE, col.names = )
+tract_income = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B19001-2024-09-02T030344.csv"), header = FALSE, check.names = FALSE, col.names = ))
 
-
+tract_occ = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B25003-2024-09-02T030524.csv"), header = FALSE, check.names = FALSE, col.names = ))
 ```
 
 

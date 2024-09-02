@@ -1,0 +1,3 @@
+"0","state_housing = read.csv(paste0(project_dir,""/Data/State Tables/ACSST5Y2020.S2504-2024-09-02T025004.csv""), header = FALSE, check.names = FALSE, col.names = )"
+"2","Error: object 'project_dir' not found
+"
