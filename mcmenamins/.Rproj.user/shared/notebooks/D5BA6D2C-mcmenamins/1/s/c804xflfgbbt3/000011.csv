@@ -1,0 +1,9 @@
+"0","#convert pop to numeric
+state_housing = state_housing %>%
+  convert(num(housing_units)) %>%
+  convert(num(sfh))\
+"
+"2","Error: unexpected '\\' in:
+""  convert(num(housing_units)) %>%
+  convert(num(sfh))\""
+"

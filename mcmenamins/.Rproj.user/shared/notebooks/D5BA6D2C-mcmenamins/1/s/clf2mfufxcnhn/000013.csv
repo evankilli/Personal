@@ -1,0 +1,16 @@
+"0","##remove variables
+state_dem = state_dem %>% 
+  select(-contains(c(""Margin"", ""Percent""))) %>% 
+  select(-c(`NA`))
+"
+"1","[1m[33mError[39m in `select()`:[22m
+[33m![39m Names must be unique.
+[31m✖[39m These names are duplicated:
+  * ""Estimate!!SEX AND AGE!!Total population!!18 years and over"" at locations 23 and 27.
+  * ""Estimate!!SEX AND AGE!!Total population!!65 years and over"" at locations 26 and 31.
+  * ""Estimate!!RACE!!Total population!!One race"" at locations 36 and 38.
+  * ""Estimate!!RACE!!Total population!!Two or more races"" at locations 37 and 60.
+Backtrace:
+[90m 1. [39m... %>% select(-c(`NA`))
+[90m 4. [39m[1m[94mdplyr:::select.data.frame([39m[22m., -contains(c(""Margin"", ""Percent""))[1m[94m)[39m[22m
+"
