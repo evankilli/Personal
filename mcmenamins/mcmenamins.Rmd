@@ -1,16 +1,24 @@
-#Author: Evan Killion
-#Title: McMenamin's Geospatial Analysis
-#Date last modified: 8-31-24
+---
+title: "McMenamins Geospatial Analysis"
+author: "Evan Killion"
+date: "2024-09-02"
+output: html_document
+---
 
-### Load Necessary Packages ###
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list = ls())
+```
+
+```{r load packages}
 library(librarian)
 
 shelf(tidyverse, data.table, devtools, ggplot2, ggmap, htmltools, htmlwidgets, 
-      readxl, shiny, tibble)
+      readxl, shiny, tibble, sf, tmap, sp)
+```
 
-
-### Bring in McMenamin's Locations ###
-
+```{r bring in mcmenamins locations, echo=FALSE}
 #Import loc w name and coords from website javascript
 myLatLng1 <- list(name = '23rd Avenue Bottle Shop', lat = 45.535327, lng = -122.698563)
 myLatLng2 <- list(name = 'Als Den', lat = 45.522791, lng = -122.683361)
@@ -85,7 +93,53 @@ loc_list = list(myLatLng1, myLatLng2, myLatLng3, myLatLng4, myLatLng5, myLatLng6
                 myLatLng47, myLatLng48, myLatLng49, myLatLng50, myLatLng51, myLatLng52, myLatLng53, myLatLng54, myLatLng55, 
                 myLatLng56, myLatLng57, myLatLng58, myLatLng59, myLatLng60, myLatLng61, myLatLng62, myLatLng63)
 
+#transform list of lists to dataframe
+mcmen_loc = transpose(as.data.frame(do.call(cbind, loc_list)))
+colnames(mcmen_loc) = c("name", "lat", "long")
 
+#transform dataframe to spatial
+mcmen_loc = as.data.frame(mcmen_loc) %>% 
+  st_as_sf(coords = c("long", "lat"), crs = 4269, remove = FALSE)
+
+mcmen_loc = as(mcmen_loc, "Spatial")
+```
+
+```{r bring in census shapefiles}
+#bring in OR tracts
+or_tracts_file = 'tl_2020_41_tract.shp'
+or_tracts_shape = read_sf(file.path("C:/Users/evank/Documents/GitHub/Personal/mcmenamins/Data/Census Shapefiles/tl_2020_41_tract", or_tracts_file))
+
+#bring in WA tracts
+wa_tracts_file = 'tl_2020_53_tract.shp'
+wa_tracts_shape = read_sf(file.path("C:/Users/evank/Documents/GitHub/Personal/mcmenamins/Data/Census Shapefiles/tl_2020_53_tract", wa_tracts_file))
+
+#combine OR and WA tract datasets to have one tract dataset
+pnw_tracts = bind_rows(or_tracts_shape, wa_tracts_shape)
+
+pnw_tracts = as(pnw_tracts, "Spatial")
+
+#bring in MSA dataset
+msa_file = 'tl_2020_us_cbsa.shp'
+msa_shape = read_sf(file.path("C:/Users/evank/Documents/GitHub/Personal/mcmenamins/Data/Census Shapefiles/tl_2020_us_cbsa", msa_file))
+```
+
+```{r identify tracts with a mcmenamins}
+#join mcmenamins points to tract shapes
+mcmen_tract = pnw_tracts[mcmen_loc, ]
+
+plot(mcmen_tract$geometry, col = alpha("blue", 0.3))
+
+#transform mcmen tracts to spatial
+mcmen_tract = as(mcmen_tract, "Spatial")
+
+#count locations in each tract
+mcmen_tract = sp::over(mcmen_loc, pnw_tracts)
+table(mcmen_tract$NAMELSAD)
+```
+
+```{r identify tracts with a mcmenamins}
+
+```
 
 
 

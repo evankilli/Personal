@@ -1,0 +1,4 @@
+"0","msa_shape = read_sf(file.path(""C:/Users/evank/Documents/GitHub/Personal/mcmenamins/Data/Census Shapefiles/tl_2020_us_cbsa"", wmsa_file))
+"
+"2","Error: object 'wmsa_file' not found
+"
