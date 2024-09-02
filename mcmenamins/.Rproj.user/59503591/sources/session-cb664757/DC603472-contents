@@ -137,10 +137,51 @@ mcmen_tract = sp::over(mcmen_loc, pnw_tracts)
 table(mcmen_tract$NAMELSAD)
 ```
 
-```{r identify tracts with a mcmenamins}
+```{r import state-level census tables}
+state_housing = read.csv(paste0(project_dir,"/Data/State Tables/ACSST5Y2020.S2504-2024-09-02T025004.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+state_race = read.csv(paste0(project_dir,"/Data/State Tables/DECENNIALCD1182020.P9-2024-09-02T020426.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+state_social = read.csv(paste0(project_dir,"/Data/State Tables/ACSDP5Y2020.DP02-2024-09-02T024239.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+state_econ = read.csv(paste0(project_dir,"/Data/State Tables/ACSDP5Y2020.DP03-2024-09-02T025117.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+state_dem = read.csv(paste0(project_dir,"/Data/State Tables/ACSDP5Y2020.DP05-2024-09-02T024224.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+state_mob = read.csv(paste0(project_dir,"/Data/State Tables/ACSDT5Y2020.B07003-2024-09-02T020851.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+state_income = read.csv(paste0(project_dir,"/Data/State Tables/ACSDT5Y2020.B19001-2024-09-02T024917.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+state_occ = read.csv(paste0(project_dir,"/Data/State Tables/ACSDT5Y2020.B25003-2024-09-02T024941.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+state_lang = read.csv(paste0(project_dir,"/Data/State Tables/ACSST5Y2020.S1601-2024-09-02T020749.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+
 
 ```
 
+```{r import tract-level census tables}
+#import state level tables
+tract_lang = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSST5Y2020.S1601-2024-09-02T025548.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+tract_housing = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSST5Y2020.S2504-2024-09-02T030714.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+tract_race = read.csv(paste0(project_dir,"/Data/Tract Tables/DECENNIALDHC2020.P9-2024-09-02T025304.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+tract_social = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP02-2024-09-02T030223.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+tract_econ = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP03-2024-09-02T030910.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+tract_dem = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP05-2024-09-02T030011.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+tract_mob = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B07003-2024-09-02T025726.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+tract_income = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B19001-2024-09-02T030344.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+tract_occ = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B25003-2024-09-02T030524.csv"), header = FALSE, check.names = FALSE, col.names = )
+
+
+```
 
 
 
