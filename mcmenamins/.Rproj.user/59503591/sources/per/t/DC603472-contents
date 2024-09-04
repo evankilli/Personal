@@ -87,13 +87,7 @@ myLatLng62 <- list(name = 'White Eagle Saloon & Hotel', lat = 45.540756, lng = -
 myLatLng63 <- list(name = 'Wilsonville Old Church & Pub', lat = 45.300693, lng = -122.772776)
 
 #combine lists into one list
-loc_list = list(myLatLng1, myLatLng2, myLatLng3, myLatLng4, myLatLng5, myLatLng6, myLatLng7, myLatLng8, myLatLng9, myLatLng10, 
-                myLatLng11, myLatLng12, myLatLng13, myLatLng14, myLatLng15, myLatLng16, myLatLng17, myLatLng18, myLatLng19, 
-                myLatLng20, myLatLng21, myLatLng22, myLatLng23, myLatLng24, myLatLng25, myLatLng26, myLatLng27, myLatLng28, 
-                myLatLng29, myLatLng30, myLatLng31, myLatLng32, myLatLng33, myLatLng34, myLatLng35, myLatLng36, myLatLng37, 
-                myLatLng38, myLatLng39, myLatLng40, myLatLng41, myLatLng42, myLatLng43, myLatLng44, myLatLng45, myLatLng46, 
-                myLatLng47, myLatLng48, myLatLng49, myLatLng50, myLatLng51, myLatLng52, myLatLng53, myLatLng54, myLatLng55, 
-                myLatLng56, myLatLng57, myLatLng58, myLatLng59, myLatLng60, myLatLng61, myLatLng62, myLatLng63)
+loc_list = list(myLatLng1, myLatLng2, myLatLng3, myLatLng4, myLatLng5, myLatLng6, myLatLng7, myLatLng8, myLatLng9, myLatLng10, myLatLng11, myLatLng12, myLatLng13, myLatLng14, myLatLng15, myLatLng16, myLatLng17, myLatLng18, myLatLng19, myLatLng20, myLatLng21, myLatLng22, myLatLng23, myLatLng24, myLatLng25, myLatLng26, myLatLng27, myLatLng28, myLatLng29, myLatLng30, myLatLng31, myLatLng32, myLatLng33, myLatLng34, myLatLng35, myLatLng36, myLatLng37, myLatLng38, myLatLng39, myLatLng40, myLatLng41, myLatLng42, myLatLng43, myLatLng44, myLatLng45, myLatLng46, myLatLng47, myLatLng48, myLatLng49, myLatLng50, myLatLng51, myLatLng52, myLatLng53, myLatLng54, myLatLng55, myLatLng56, myLatLng57, myLatLng58, myLatLng59, myLatLng60, myLatLng61, myLatLng62, myLatLng63)
 
 #transform list of lists to dataframe
 mcmen_loc = transpose(as.data.frame(do.call(cbind, loc_list)))
@@ -117,27 +111,19 @@ wa_tracts_shape = read_sf(file.path("C:/Users/evank/Documents/GitHub/Personal/mc
 
 #combine OR and WA tract datasets to have one tract dataset
 pnw_tracts = bind_rows(or_tracts_shape, wa_tracts_shape)
-
 pnw_tracts = as(pnw_tracts, "Spatial")
-
-#bring in MSA dataset
-msa_file = 'tl_2020_us_cbsa.shp'
-msa_shape = read_sf(file.path("C:/Users/evank/Documents/GitHub/Personal/mcmenamins/Data/Census Shapefiles/tl_2020_us_cbsa", msa_file))
 ```
 
-```{r identify tracts with a mcmenamins}
+```{r identify tracts with a mcmens}
 #join mcmenamins points to tract shapes
-mcmen_tract = pnw_tracts[mcmen_loc, ]
-
-plot(mcmen_tract$geometry, col = alpha("blue", 0.3))
+mcmen_tract = data.frame(pnw_tracts[mcmen_loc, ])
 
 #transform mcmen tracts to spatial
-mcmen_tract = as(mcmen_tract, "Spatial")
-
-#count locations in each tract
-mcmen_tract = sp::over(mcmen_loc, pnw_tracts)
-table(mcmen_tract$NAMELSAD)
+mcmen_tract_shape = as(mcmen_tract, "Spatial")
 ```
+
+
+
 
 ```{r import state-level census tables}
 #import state level tables
@@ -150,8 +136,6 @@ state_social = read.csv(paste0(project_dir,"/Data/State Tables/ACSDP5Y2020.DP02-
 
 state_econ = read.csv(paste0(project_dir,"/Data/State Tables/ACSDP5Y2020.DP03-Data.csv"), header = FALSE, check.names = FALSE, col.names = )
 
-state_mob = read.csv(paste0(project_dir,"/Data/State Tables/ACSDT5Y2020.B07003-Data.csv"), header = FALSE, check.names = FALSE, col.names = )
-
 state_income = read.csv(paste0(project_dir,"/Data/State Tables/ACSDT5Y2020.B19001-Data.csv"), header = FALSE, check.names = FALSE, col.names = )
 
 state_occ = read.csv(paste0(project_dir,"/Data/State Tables/ACSDT5Y2020.B25003-Data.csv"), header = FALSE, check.names = FALSE, col.names = )
@@ -159,15 +143,12 @@ state_occ = read.csv(paste0(project_dir,"/Data/State Tables/ACSDT5Y2020.B25003-D
 state_lang = read.csv(paste0(project_dir,"/Data/State Tables/ACSST5Y2020.S1601-Data.csv"), header = FALSE, check.names = FALSE, col.names = )
 ```
 
-
 ```{r process state tab structure}
 #make first row column names
 names(state_housing) <- str_trim(state_housing[2,])
 names(state_race) <- str_trim(state_race[2,])
 names(state_social) <- str_trim(state_social[2,])
 names(state_econ) <- str_trim(state_econ[2,])
-names(state_dem) <- str_trim(state_dem[2,])
-names(state_mob) <- str_trim(state_mob[2,])
 names(state_income) <- str_trim(state_income[2,])
 names(state_occ) <- str_trim(state_occ[2,])
 names(state_lang) <- str_trim(state_lang[2,])
@@ -177,8 +158,6 @@ state_housing = state_housing[-c(1, 2),]
 state_race = state_race[-c(1, 2),]
 state_social = state_social[-c(1, 2),]
 state_econ = state_econ[-c(1, 2),]
-state_dem = state_dem[-c(1, 2),]
-state_mob = state_mob[-c(1, 2),]
 state_income = state_income[-c(1, 2),]
 state_occ = state_occ[-c(1, 2),]
 state_lang = state_lang[-c(1, 2),]
@@ -372,10 +351,171 @@ state_housing = state_housing %>%
   convert(num(no_heat))
 ```
 
+```{r process state-level occupancy/tenure table}
+#remove and rename columns
+View(data.frame(colnames(state_occ)))
 
+##rename variables
+state_occ = state_occ %>% 
+  rename(geog = `Geography`, state = `Geographic Area Name`, occ_total = `Estimate!!Total:`, owner_occ = `Estimate!!Total:!!Owner occupied`, renter_occ = `Estimate!!Total:!!Renter occupied`)
 
+##remove variables
+state_occ = state_occ %>% 
+ select(c(geog, state, occ_total, owner_occ, renter_occ))
 
+#convert pop to numeric
+state_occ = state_occ %>%
+  convert(num(occ_total)) %>%
+  convert(num(owner_occ)) %>%
+  convert(num(renter_occ))
+```
 
+```{r process state-level language table}
+#remove and rename columns
+View(data.frame(colnames(state_lang)))
+
+##rename variables
+state_lang = state_lang %>% 
+  rename(geog = `Geography`, state = `Geographic Area Name`, pop_5_over = `Estimate!!Total!!Population 5 years and over`, english_only = `Estimate!!Total!!Population 5 years and over!!Speak only English`, spanish = `Estimate!!Total!!Population 5 years and over!!SPEAK A LANGUAGE OTHER THAN ENGLISH!!Spanish`, indo_euro_lang = `Estimate!!Total!!Population 5 years and over!!SPEAK A LANGUAGE OTHER THAN ENGLISH!!Other Indo-European languages`, asia_pacific_lang = `Estimate!!Total!!Population 5 years and over!!SPEAK A LANGUAGE OTHER THAN ENGLISH!!Asian and Pacific Island languages`, other_lang = `Estimate!!Total!!Population 5 years and over!!SPEAK A LANGUAGE OTHER THAN ENGLISH!!Other languages`)
+
+##remove variables
+state_lang = state_lang %>% 
+ select(c(geog, state, pop_5_over, english_only, spanish, indo_euro_lang, asia_pacific_lang, other_lang))
+
+#convert pop to numeric
+state_lang = state_lang %>%
+  convert(num(pop_5_over)) %>%
+  convert(num(english_only)) %>%
+  convert(num(spanish)) %>%
+  convert(num(indo_euro_lang)) %>%
+  convert(num(asia_pacific_lang)) %>%
+  convert(num(other_lang))
+```
+
+```{r join state census tables into one table}
+#join tables
+state_table = left_join(state_race, state_income) %>% 
+  left_join(state_social) %>% 
+  left_join(state_econ) %>% 
+  left_join(state_housing) %>% 
+  left_join(state_occ) %>% 
+  left_join(state_lang)
+
+state_table = state_table %>% 
+  select(-c(geog)) %>% 
+  rename(geog = Geography)
+
+```
+
+```{r generate state level statistics}
+#view columns to get names for later code
+View(data.frame(colnames(state_table)))
+
+#rename one table
+state_table = state_table %>% 
+  rename(race_total = total)
+
+#calculate percentages
+state_table = state_table %>% 
+  mutate(hispanic_percent = hispanic/race_total) %>%
+  mutate(white_nonh_percent = white_nonh/race_total) %>%
+  mutate(black_nonh_percent = black_nonh/race_total) %>%
+  mutate(amind_nonh_percent = amind_nonh/race_total) %>%
+  mutate(asian_nonh_percent = asian_nonh/race_total) %>%
+  mutate(pacific_nonh_percent = pacific_nonh/race_total) %>%
+  mutate(other_nonh_percent = other_nonh/race_total) %>%
+  mutate(mult_nonh_percent = mult_nonh/race_total) %>%
+  mutate(inc_less_10k_percent = inc_less_10k/inc_total) %>%
+  mutate(inc_10_15k_percent = inc_10_15k/inc_total) %>%
+  mutate(inc_15_20k_percent = inc_15_20k/inc_total) %>%
+  mutate(inc_20_25k_percent = inc_20_25k/inc_total) %>%
+  mutate(inc_25_30k_percent = inc_25_30k/inc_total) %>%
+  mutate(inc_30_35k_percent = inc_30_35k/inc_total) %>%
+  mutate(inc_35_40k_percent = inc_35_40k/inc_total) %>%
+  mutate(inc_40_45k_percent = inc_40_45k/inc_total) %>%
+  mutate(inc_45_50k_percent = inc_45_50k/inc_total) %>%
+  mutate(inc_50_60k_percent = inc_50_60k/inc_total) %>%
+  mutate(inc_60_75k_percent = inc_60_75k/inc_total) %>%
+  mutate(inc_75_100k_percent = inc_75_100k/inc_total) %>%
+  mutate(inc_100_125k_percent = inc_100_125k/inc_total) %>%
+  mutate(inc_125_150k_percent = inc_125_150k/inc_total) %>%
+  mutate(inc_150_200k_percent = inc_150_200k/inc_total) %>%
+  mutate(inc_200k_more_percent = inc_200k_more/inc_total) %>%
+  mutate(less_than_9_percent = less_than_9/ed_total) %>%
+  mutate(some_hs_percent = some_hs/ed_total) %>%
+  mutate(hs_grad_percent = hs_grad/ed_total) %>%
+  mutate(some_college_percent = some_college/ed_total) %>%
+  mutate(associate_percent = associate/ed_total) %>%
+  mutate(bachelors_percent = bachelors/ed_total) %>%
+  mutate(grad_percent = grad/ed_total) %>%
+  mutate(hs_higher_percent = hs_higher/ed_total) %>%
+  mutate(bachelors_higher_percent = bachelors_higher/ed_total) %>%
+  mutate(veteran_percent = veteran/vet_status_total) %>%
+  mutate(disabled_percent = disabled/disabled_status_total) %>%
+  mutate(same_house_percent = same_house/residence_total) %>%
+  mutate(same_county_percent = same_county/residence_total) %>%
+  mutate(diff_county_percent = diff_county/residence_total) %>%
+  mutate(diff_state_percent = diff_state/residence_total) %>%
+  mutate(abroad_percent = abroad/residence_total) %>%
+  mutate(born_same_state_percent = born_same_state/place_total) %>%
+  mutate(born_diff_state_percent = born_diff_state/place_total) %>%
+  mutate(born_us_other_percent = born_us_other/place_total) %>%
+  mutate(born_abroad_percent = born_abroad/place_total) %>%
+  mutate(with_comp_percent = with_comp/comp_total) %>%
+  mutate(with_broadband_percent = with_broadband/comp_total) %>%
+  mutate(commute_drive_alone_percent = commute_drive_alone/commute_total) %>%
+  mutate(commute_carpool_percent = commute_carpool/commute_total) %>%
+  mutate(commute_transit_percent = commute_transit/commute_total) %>%
+  mutate(commute_walk_percent = commute_walk/commute_total) %>%
+  mutate(commute_other_percent = commute_other/commute_total) %>%
+  mutate(commute_wfh_percent = commute_wfh/commute_total) %>%
+  mutate(earnings_percent = earnings/inc_ben_total) %>%
+  mutate(soc_sec_percent = soc_sec/inc_ben_total) %>%
+  mutate(retirement_inc_percent = retirement_inc/inc_ben_total) %>%
+  mutate(supp_sec_percent = supp_sec/inc_ben_total) %>%
+  mutate(cash_assist_percent = cash_assist/inc_ben_total) %>%
+  mutate(food_stamp_percent = food_stamp/inc_ben_total) %>%
+  mutate(private_ins_percent = private_ins/insurance_total) %>%
+  mutate(public_ins_percent = public_ins/insurance_total) %>%
+  mutate(no_ins_percent = no_ins/insurance_total) %>%
+  mutate(sfh_percent = sfh/housing_units) %>%
+  mutate(sf_attached_percent = sf_attached/housing_units) %>%
+  mutate(duplex_percent = duplex/housing_units) %>%
+  mutate(tri_quad_plex_percent = tri_quad_plex/housing_units) %>%
+  mutate(apt_5_9_percent = apt_5_9/housing_units) %>%
+  mutate(apt_10_more_percent = apt_10_more/housing_units) %>%
+  mutate(mobile_home_percent = mobile_home/housing_units) %>%
+  mutate(built_2014_later_percent = built_2014_later/housing_units) %>%
+  mutate(built_2010_2013_percent = built_2010_2013/housing_units) %>%
+  mutate(built_2000_2009_percent = built_2000_2009/housing_units) %>%
+  mutate(built_1980_1999_percent = built_1980_1999/housing_units) %>%
+  mutate(built_1960_1979_percent = built_1960_1979/housing_units) %>%
+  mutate(built_1940_1959_percent = built_1940_1959/housing_units) %>%
+  mutate(built_1939_earlier_percent = built_1939_earlier/housing_units) %>%
+  mutate(no_bed_percent = no_bed/housing_units) %>%
+  mutate(one_bed_percent = one_bed/housing_units) %>%
+  mutate(two_three_bed_percent = two_three_bed/housing_units) %>%
+  mutate(four_more_bed_percent = four_more_bed/housing_units) %>%
+  mutate(no_veh_percent = no_veh/housing_units) %>%
+  mutate(one_veh_percent = one_veh/housing_units) %>%
+  mutate(two_veh_percent = two_veh/housing_units) %>%
+  mutate(three_more_veh_percent = three_more_veh/housing_units) %>%
+  mutate(gas_pipe_heat_percent = gas_pipe_heat/housing_units) %>%
+  mutate(gas_tank_heat_percent = gas_tank_heat/housing_units) %>%
+  mutate(elec_heat_percent = elec_heat/housing_units) %>%
+  mutate(oil_heat_percent = oil_heat/housing_units) %>%
+  mutate(coal_heat_percent = coal_heat/housing_units) %>%
+  mutate(other_heat_percent = other_heat/housing_units) %>%
+  mutate(no_heat_percent = no_heat/housing_units) %>%
+  mutate(owner_occ_percent = owner_occ/occ_total) %>%
+  mutate(renter_occ_percent = renter_occ/occ_total) %>%
+  mutate(english_only_percent = english_only/pop_5_over) %>%
+  mutate(spanish_percent = spanish/pop_5_over) %>%
+  mutate(indo_euro_lang_percent = indo_euro_lang/pop_5_over) %>%
+  mutate(asia_pacific_lang_percent = asia_pacific_lang/pop_5_over) %>%
+  mutate(other_lang_percent = other_lang/pop_5_over) %>% 
+  mutate(dataset = "state")
+```
 
 
 
@@ -385,24 +525,559 @@ state_housing = state_housing %>%
 ```{r import tract-level census tables}
 #import tract level tables
 
-tract_lang = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSST5Y2020.S1601-2024-09-02T025548.csv"), header = FALSE, check.names = FALSE, col.names = ))
+tract_lang = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSST5Y2020.S1601-Data.csv"), header = FALSE, check.names = FALSE, col.names = )
 
-tract_housing = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSST5Y2020.S2504-2024-09-02T030714.csv"), header = FALSE, check.names = FALSE, col.names = ))
+tract_housing = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSST5Y2020.S2504-Data.csv"), header = FALSE, check.names = FALSE, col.names = )
 
-tract_race = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/DECENNIALDHC2020.P9-2024-09-02T025304.csv"), header = FALSE, check.names = FALSE, col.names = ))
+tract_race = read.csv(paste0(project_dir,"/Data/Tract Tables/DECENNIALDHC2020.P9-Data.csv"), header = FALSE, check.names = FALSE, col.names = )
 
-tract_social = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP02-2024-09-02T030223.csv"), header = FALSE, check.names = FALSE, col.names = ))
+tract_social = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP02-Data.csv"), header = FALSE, check.names = FALSE, col.names = )
 
-tract_econ = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP03-2024-09-02T030910.csv"), header = FALSE, check.names = FALSE, col.names = ))
+tract_econ = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP03-Data.csv"), header = FALSE, check.names = FALSE, col.names = )
 
-tract_dem = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDP5Y2020.DP05-2024-09-02T030011.csv"), header = FALSE, check.names = FALSE, col.names = ))
+tract_income = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B19001-Data.csv"), header = FALSE, check.names = FALSE, col.names = )
 
-tract_mob = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B07003-2024-09-02T025726.csv"), header = FALSE, check.names = FALSE, col.names = ))
-
-tract_income = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B19001-2024-09-02T030344.csv"), header = FALSE, check.names = FALSE, col.names = ))
-
-tract_occ = transpose(read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B25003-2024-09-02T030524.csv"), header = FALSE, check.names = FALSE, col.names = ))
+tract_occ = read.csv(paste0(project_dir,"/Data/Tract Tables/ACSDT5Y2020.B25003-Data.csv"), header = FALSE, check.names = FALSE, col.names = )
 ```
+
+```{r process tract tab structure}
+#make first row column names
+names(tract_housing) <- str_trim(tract_housing[2,])
+names(tract_race) <- str_trim(tract_race[2,])
+names(tract_social) <- str_trim(tract_social[2,])
+names(tract_econ) <- str_trim(tract_econ[2,])
+names(tract_income) <- str_trim(tract_income[2,])
+names(tract_occ) <- str_trim(tract_occ[2,])
+names(tract_lang) <- str_trim(tract_lang[2,])
+
+#remove original first row (now column names)
+tract_housing = tract_housing[-c(1, 2),]
+tract_race = tract_race[-c(1, 2),]
+tract_social = tract_social[-c(1, 2),]
+tract_econ = tract_econ[-c(1, 2),]
+tract_income = tract_income[-c(1, 2),]
+tract_occ = tract_occ[-c(1, 2),]
+tract_lang = tract_lang[-c(1, 2),]
+```
+
+```{r process tract-level race table}
+#remove and rename columns
+View(data.frame(colnames(tract_race)))
+
+##remove variables
+tract_race = tract_race %>% 
+  select(-c(`!!Total:!!Not Hispanic or Latino:`, `!!Total:!!Not Hispanic or Latino:!!Population of one race:`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!White; Black or African American`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!White; American Indian and Alaska Native`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!White; Asian`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!White; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!White; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!Black or African American; American Indian and Alaska Native`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!Black or African American; Asian`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!Black or African American; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!Black or African American; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!American Indian and Alaska Native; Asian`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!American Indian and Alaska Native; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!Asian; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!Asian; Some Other Race`)) %>% 
+select(-c(`!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:!!Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!White; Black or African American; American Indian and Alaska Native`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!White; Black or African American; Asian`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!White; Black or African American; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!White; Black or African American; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!White; American Indian and Alaska Native; Asian`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!White; American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!White; American Indian and Alaska Native; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!White; Asian; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!White; Asian; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!White; Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!Black or African American; American Indian and Alaska Native; Asian`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!Black or African American; American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!Black or African American; American Indian and Alaska Native; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!Black or African American; Asian; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!Black or African American; Asian; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!Black or African American; Native Hawaiian and Other Pacific Islander; Some Other Race`)) %>% 
+select(-c(`!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!American Indian and Alaska Native; Asian; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of three races:!!Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!White; Black or African American; American Indian and Alaska Native; Asian`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!White; Black or African American; American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!White; Black or African American; American Indian and Alaska Native; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!White; Black or African American; Asian; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!White; Black or African American; Asian; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!White; Black or African American; Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!White; American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!White; American Indian and Alaska Native; Asian; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!White; American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!White; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!Black or African American; American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!Black or African American; American Indian and Alaska Native; Asian; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!Black or African American; American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!Black or African American; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of four races:!!American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of five races:`)) %>% 
+  select(-c(`!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of five races:!!White; Black or African American; American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of five races:!!White; Black or African American; American Indian and Alaska Native; Asian; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of five races:!!White; Black or African American; American Indian and Alaska Native; Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of five races:!!White; Black or African American; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of five races:!!White; American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of five races:!!Black or African American; American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of six races:`, `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of six races:!!White; Black or African American; American Indian and Alaska Native; Asian; Native Hawaiian and Other Pacific Islander; Some Other Race`, `NA`))
+
+##rename variables
+tract_race = tract_race %>% 
+  rename(geog = Geography, tract = `Geographic Area Name`, race_total = `!!Total:`, hispanic = `!!Total:!!Hispanic or Latino`, white_nonh = `!!Total:!!Not Hispanic or Latino:!!Population of one race:!!White alone`, black_nonh = `!!Total:!!Not Hispanic or Latino:!!Population of one race:!!Black or African American alone`, amind_nonh = `!!Total:!!Not Hispanic or Latino:!!Population of one race:!!American Indian and Alaska Native alone`, asian_nonh = `!!Total:!!Not Hispanic or Latino:!!Population of one race:!!Asian alone`, pacific_nonh = `!!Total:!!Not Hispanic or Latino:!!Population of one race:!!Native Hawaiian and Other Pacific Islander alone`, other_nonh = `!!Total:!!Not Hispanic or Latino:!!Population of one race:!!Some Other Race alone`, mult_nonh = `!!Total:!!Not Hispanic or Latino:!!Population of two or more races:`)
+
+#convert pop to numeric
+tract_race = tract_race %>%
+  convert(num(total)) %>%
+  convert(num(hispanic)) %>%
+  convert(num(white_nonh)) %>%
+  convert(num(black_nonh)) %>%
+  convert(num(amind_nonh)) %>%
+  convert(num(asian_nonh)) %>%
+  convert(num(pacific_nonh)) %>%
+  convert(num(other_nonh)) %>%
+  convert(num(mult_nonh))
+```
+
+```{r process tract-level income table}
+#remove and rename columns
+View(data.frame(colnames(tract_income)))
+
+##remove variables
+tract_income = tract_income %>% 
+  select(-contains("Margin")) %>% 
+  select(-c(`NA`))
+
+##rename variables
+tract_income = tract_income %>% 
+  rename(geog = `Geography`, tract = `Geographic Area Name`, inc_total = `Estimate!!Total:`, inc_less_10k = `Estimate!!Total:!!Less than $10,000`, inc_10_15k = `Estimate!!Total:!!$10,000 to $14,999`, inc_15_20k = `Estimate!!Total:!!$15,000 to $19,999`, inc_20_25k = `Estimate!!Total:!!$20,000 to $24,999`, inc_25_30k = `Estimate!!Total:!!$25,000 to $29,999`, inc_30_35k = `Estimate!!Total:!!$30,000 to $34,999`, inc_35_40k = `Estimate!!Total:!!$35,000 to $39,999`, inc_40_45k = `Estimate!!Total:!!$40,000 to $44,999`, inc_45_50k = `Estimate!!Total:!!$45,000 to $49,999`, inc_50_60k = `Estimate!!Total:!!$50,000 to $59,999`, inc_60_75k = `Estimate!!Total:!!$60,000 to $74,999`, inc_75_100k = `Estimate!!Total:!!$75,000 to $99,999`, inc_100_125k = `Estimate!!Total:!!$100,000 to $124,999`, inc_125_150k = `Estimate!!Total:!!$125,000 to $149,999`, inc_150_200k = `Estimate!!Total:!!$150,000 to $199,999`, inc_200k_more = `Estimate!!Total:!!$200,000 or more`)
+
+#convert pop to numeric
+tract_income = tract_income %>%
+  convert(num(inc_total)) %>%
+  convert(num(inc_less_10k)) %>%
+  convert(num(inc_10_15k)) %>%
+  convert(num(inc_15_20k)) %>%
+  convert(num(inc_20_25k)) %>%
+  convert(num(inc_25_30k)) %>%
+  convert(num(inc_30_35k)) %>%
+  convert(num(inc_35_40k)) %>%
+  convert(num(inc_40_45k)) %>%
+  convert(num(inc_45_50k)) %>% 
+  convert(num(inc_50_60k)) %>%
+  convert(num(inc_60_75k)) %>%
+  convert(num(inc_75_100k)) %>%
+  convert(num(inc_100_125k)) %>%
+  convert(num(inc_125_150k)) %>%
+  convert(num(inc_150_200k)) %>%
+  convert(num(inc_200k_more))
+```
+
+```{r process tract-level social table}
+#remove and rename columns
+View(data.frame(colnames(tract_social)))
+
+##rename variables
+tract_social = tract_social %>% 
+  rename(geog = `Geography`, tract = `Geographic Area Name`, ed_total = `Estimate!!EDUCATIONAL ATTAINMENT!!Population 25 years and over`, less_than_9 = `Estimate!!EDUCATIONAL ATTAINMENT!!Population 25 years and over!!Less than 9th grade`, some_hs = `Estimate!!EDUCATIONAL ATTAINMENT!!Population 25 years and over!!9th to 12th grade, no diploma`, hs_grad = `Estimate!!EDUCATIONAL ATTAINMENT!!Population 25 years and over!!High school graduate (includes equivalency)`, some_college = `Estimate!!EDUCATIONAL ATTAINMENT!!Population 25 years and over!!Some college, no degree`, associate = `Estimate!!EDUCATIONAL ATTAINMENT!!Population 25 years and over!!Associate's degree`, bachelors = `Estimate!!EDUCATIONAL ATTAINMENT!!Population 25 years and over!!Bachelor's degree`, grad = `Estimate!!EDUCATIONAL ATTAINMENT!!Population 25 years and over!!Graduate or professional degree`, hs_higher = `Estimate!!EDUCATIONAL ATTAINMENT!!Population 25 years and over!!High school graduate or higher`, bachelors_higher = `Estimate!!EDUCATIONAL ATTAINMENT!!Population 25 years and over!!Bachelor's degree or higher`, vet_status_total = `Estimate!!VETERAN STATUS!!Civilian population 18 years and over`, veteran = `Estimate!!VETERAN STATUS!!Civilian population 18 years and over!!Civilian veterans`, disabled_status_total = `Estimate!!DISABILITY STATUS OF THE CIVILIAN NONINSTITUTIONALIZED POPULATION!!Total Civilian Noninstitutionalized Population`, disabled = `Estimate!!DISABILITY STATUS OF THE CIVILIAN NONINSTITUTIONALIZED POPULATION!!Total Civilian Noninstitutionalized Population!!With a disability`, residence_total = `Estimate!!RESIDENCE 1 YEAR AGO!!Population 1 year and over`, same_house = `Estimate!!RESIDENCE 1 YEAR AGO!!Population 1 year and over!!Same house`, same_county = `Estimate!!RESIDENCE 1 YEAR AGO!!Population 1 year and over!!Different house (in the U.S. or abroad)!!Different house in the U.S.!!Same county`, diff_county = `Estimate!!RESIDENCE 1 YEAR AGO!!Population 1 year and over!!Different house (in the U.S. or abroad)!!Different house in the U.S.!!Different county!!Same state`, diff_state = `Estimate!!RESIDENCE 1 YEAR AGO!!Population 1 year and over!!Different house (in the U.S. or abroad)!!Different house in the U.S.!!Different county!!Different state`, abroad = `Estimate!!RESIDENCE 1 YEAR AGO!!Population 1 year and over!!Different house (in the U.S. or abroad)!!Abroad`, place_total = `Estimate!!PLACE OF BIRTH!!Total population`, born_same_state = `Estimate!!PLACE OF BIRTH!!Total population!!Native!!Born in United States!!State of residence`, born_diff_state = `Estimate!!PLACE OF BIRTH!!Total population!!Native!!Born in United States!!Different state`, born_us_other = `Estimate!!PLACE OF BIRTH!!Total population!!Native!!Born in Puerto Rico, U.S. Island areas, or born abroad to American parent(s)`, born_abroad = `Estimate!!PLACE OF BIRTH!!Total population!!Foreign born`, comp_total = `Estimate!!COMPUTERS AND INTERNET USE!!Total households`, with_comp = `Estimate!!COMPUTERS AND INTERNET USE!!Total households!!With a computer`, with_broadband = `Estimate!!COMPUTERS AND INTERNET USE!!Total households!!With a broadband Internet subscription`)
+
+##remove variables
+tract_social = tract_social %>% 
+  select(-contains(c("Margin", "Percent"))) %>% 
+  select(-c(`NA`)) %>% 
+  select(c(geog, tract, ed_total, less_than_9, some_hs, hs_grad, some_college, associate, bachelors, grad, hs_higher, bachelors_higher, vet_status_total, veteran, disabled_status_total, disabled, residence_total, same_house, same_county, diff_county, diff_state, abroad, place_total, born_same_state, born_diff_state, born_us_other, born_abroad, comp_total, with_comp, with_broadband))
+
+#convert pop to numeric
+tract_social = tract_social %>%
+  convert(num(ed_total)) %>%
+  convert(num(less_than_9)) %>%
+  convert(num(some_hs)) %>%
+  convert(num(hs_grad)) %>%
+  convert(num(some_college)) %>%
+  convert(num(associate)) %>%
+  convert(num(bachelors)) %>%
+  convert(num(grad)) %>%
+  convert(num(hs_higher)) %>%
+  convert(num(bachelors_higher)) %>%
+  convert(num(vet_status_total)) %>%
+  convert(num(veteran)) %>%
+  convert(num(disabled_status_total)) %>%
+  convert(num(disabled)) %>%
+  convert(num(residence_total)) %>%
+  convert(num(same_house)) %>%
+  convert(num(same_county)) %>%
+  convert(num(diff_county)) %>%
+  convert(num(diff_state)) %>%
+  convert(num(abroad)) %>%
+  convert(num(place_total)) %>%
+  convert(num(born_same_state)) %>%
+  convert(num(born_diff_state)) %>%
+  convert(num(born_us_other)) %>%
+  convert(num(born_abroad)) %>%
+  convert(num(comp_total)) %>%
+  convert(num(with_comp)) %>%
+  convert(num(with_broadband))
+```
+
+```{r process tract-level econ table}
+#remove and rename columns
+View(data.frame(colnames(tract_econ)))
+
+##rename variables
+tract_econ = tract_econ %>% 
+  rename(geog = `Geography`, tract = `Geographic Area Name`, commute_total = `Estimate!!COMMUTING TO WORK!!Workers 16 years and over`, commute_drive_alone = `Estimate!!COMMUTING TO WORK!!Workers 16 years and over!!Car, truck, or van -- drove alone`, commute_carpool = `Estimate!!COMMUTING TO WORK!!Workers 16 years and over!!Car, truck, or van -- carpooled`, commute_transit = `Estimate!!COMMUTING TO WORK!!Workers 16 years and over!!Public transportation (excluding taxicab)`, commute_walk = `Estimate!!COMMUTING TO WORK!!Workers 16 years and over!!Walked`, commute_other = `Estimate!!COMMUTING TO WORK!!Workers 16 years and over!!Other means`, commute_wfh = `Estimate!!COMMUTING TO WORK!!Workers 16 years and over!!Worked from home`, inc_ben_total = `Estimate!!INCOME AND BENEFITS (IN 2020 INFLATION-ADJUSTED DOLLARS)!!Total households`, earnings = `Estimate!!INCOME AND BENEFITS (IN 2020 INFLATION-ADJUSTED DOLLARS)!!Total households!!With earnings`, soc_sec = `Estimate!!INCOME AND BENEFITS (IN 2020 INFLATION-ADJUSTED DOLLARS)!!Total households!!With Social Security`, retirement_inc = `Estimate!!INCOME AND BENEFITS (IN 2020 INFLATION-ADJUSTED DOLLARS)!!Total households!!With retirement income`, supp_sec = `Estimate!!INCOME AND BENEFITS (IN 2020 INFLATION-ADJUSTED DOLLARS)!!Total households!!With Supplemental Security Income`, cash_assist = `Estimate!!INCOME AND BENEFITS (IN 2020 INFLATION-ADJUSTED DOLLARS)!!Total households!!With cash public assistance income`, food_stamp = `Estimate!!INCOME AND BENEFITS (IN 2020 INFLATION-ADJUSTED DOLLARS)!!Total households!!With Food Stamp/SNAP benefits in the past 12 months`, insurance_total = `Estimate!!HEALTH INSURANCE COVERAGE!!Civilian noninstitutionalized population`, private_ins = `Estimate!!HEALTH INSURANCE COVERAGE!!Civilian noninstitutionalized population!!With health insurance coverage!!With private health insurance`, public_ins = `Estimate!!HEALTH INSURANCE COVERAGE!!Civilian noninstitutionalized population!!With health insurance coverage!!With public coverage`, no_ins = `Estimate!!HEALTH INSURANCE COVERAGE!!Civilian noninstitutionalized population!!No health insurance coverage`)
+
+##remove variables
+tract_econ = tract_econ %>% 
+  select(c(geog, tract, commute_total, commute_drive_alone, commute_carpool, commute_transit, commute_walk, commute_other, commute_wfh, inc_ben_total, earnings, soc_sec, retirement_inc, supp_sec, cash_assist, food_stamp, insurance_total, private_ins, public_ins, no_ins))
+
+#convert pop to numeric
+tract_econ = tract_econ %>%
+  convert(num(commute_total)) %>%
+  convert(num(commute_drive_alone)) %>%
+  convert(num(commute_carpool)) %>%
+  convert(num(commute_transit)) %>%
+  convert(num(commute_walk)) %>%
+  convert(num(commute_other)) %>%
+  convert(num(commute_wfh)) %>%
+  convert(num(inc_ben_total)) %>%
+  convert(num(earnings)) %>%
+  convert(num(soc_sec)) %>%
+  convert(num(retirement_inc)) %>%
+  convert(num(supp_sec)) %>%
+  convert(num(cash_assist)) %>%
+  convert(num(food_stamp)) %>%
+  convert(num(insurance_total)) %>%
+  convert(num(private_ins)) %>%
+  convert(num(public_ins)) %>%
+  convert(num(no_ins))
+```
+
+```{r process tract-level housing table}
+#remove and rename columns
+View(data.frame(colnames(tract_housing)))
+
+##rename variables
+tract_housing = tract_housing %>% 
+  rename(geog = `Geography`, tract = `Geographic Area Name`, housing_units = `Estimate!!Occupied housing units!!Occupied housing units`, sfh = `Estimate!!Occupied housing units!!Occupied housing units!!UNITS IN STRUCTURE!!1, detached`, sf_attached = `Estimate!!Occupied housing units!!Occupied housing units!!UNITS IN STRUCTURE!!1, attached`, duplex = `Estimate!!Occupied housing units!!Occupied housing units!!UNITS IN STRUCTURE!!2 apartments`, tri_quad_plex = `Estimate!!Occupied housing units!!Occupied housing units!!UNITS IN STRUCTURE!!3 or 4 apartments`, apt_5_9 = `Estimate!!Occupied housing units!!Occupied housing units!!UNITS IN STRUCTURE!!5 to 9 apartments`, apt_10_more = `Estimate!!Occupied housing units!!Occupied housing units!!UNITS IN STRUCTURE!!10 or more apartments`, mobile_home = `Estimate!!Occupied housing units!!Occupied housing units!!UNITS IN STRUCTURE!!Mobile home or other type of housing`, built_2014_later = `Estimate!!Occupied housing units!!Occupied housing units!!YEAR STRUCTURE BUILT!!2014 or later`, built_2010_2013 = `Estimate!!Occupied housing units!!Occupied housing units!!YEAR STRUCTURE BUILT!!2010 to 2013`, built_2000_2009 = `Estimate!!Occupied housing units!!Occupied housing units!!YEAR STRUCTURE BUILT!!2000 to 2009`, built_1980_1999 = `Estimate!!Occupied housing units!!Occupied housing units!!YEAR STRUCTURE BUILT!!1980 to 1999`, built_1960_1979 = `Estimate!!Occupied housing units!!Occupied housing units!!YEAR STRUCTURE BUILT!!1960 to 1979`, built_1940_1959 = `Estimate!!Occupied housing units!!Occupied housing units!!YEAR STRUCTURE BUILT!!1940 to 1959`, built_1939_earlier = `Estimate!!Occupied housing units!!Occupied housing units!!YEAR STRUCTURE BUILT!!1939 or earlier`, no_bed = `Estimate!!Occupied housing units!!Occupied housing units!!BEDROOMS!!No bedroom`, one_bed = `Estimate!!Occupied housing units!!Occupied housing units!!BEDROOMS!!1 bedroom`, two_three_bed = `Estimate!!Occupied housing units!!Occupied housing units!!BEDROOMS!!2 or 3 bedrooms`, four_more_bed = `Estimate!!Occupied housing units!!Occupied housing units!!BEDROOMS!!4 or more bedrooms`, no_veh = `Estimate!!Occupied housing units!!Occupied housing units!!VEHICLES AVAILABLE!!No vehicle available`, one_veh = `Estimate!!Occupied housing units!!Occupied housing units!!VEHICLES AVAILABLE!!1 vehicle available`, two_veh = `Estimate!!Occupied housing units!!Occupied housing units!!VEHICLES AVAILABLE!!2 vehicles available`, three_more_veh = `Estimate!!Occupied housing units!!Occupied housing units!!VEHICLES AVAILABLE!!3 or more vehicles available`, gas_pipe_heat = `Estimate!!Occupied housing units!!Occupied housing units!!HOUSE HEATING FUEL!!Utility gas`, gas_tank_heat = `Estimate!!Occupied housing units!!Occupied housing units!!HOUSE HEATING FUEL!!Bottled, tank, or LP gas`, elec_heat = `Estimate!!Occupied housing units!!Occupied housing units!!HOUSE HEATING FUEL!!Electricity`, oil_heat = `Estimate!!Occupied housing units!!Occupied housing units!!HOUSE HEATING FUEL!!Fuel oil, kerosene, etc.`, coal_heat = `Estimate!!Occupied housing units!!Occupied housing units!!HOUSE HEATING FUEL!!Coal or coke`, other_heat = `Estimate!!Occupied housing units!!Occupied housing units!!HOUSE HEATING FUEL!!All other fuels`, no_heat = `Estimate!!Occupied housing units!!Occupied housing units!!HOUSE HEATING FUEL!!No fuel used`)
+
+##remove variables
+tract_housing = tract_housing %>% 
+ select(c(geog, tract, housing_units, sfh, sf_attached, duplex, tri_quad_plex, apt_5_9, apt_10_more, mobile_home, built_2014_later, built_2010_2013, built_2000_2009, built_1980_1999, built_1960_1979, built_1940_1959, built_1939_earlier, no_bed, one_bed, two_three_bed, four_more_bed, no_veh, one_veh, two_veh, three_more_veh, gas_pipe_heat, gas_tank_heat, elec_heat, oil_heat, coal_heat, other_heat, no_heat))
+
+#convert pop to numeric
+tract_housing = tract_housing %>%
+  convert(num(housing_units)) %>%
+  convert(num(sfh)) %>% 
+  convert(num(sf_attached)) %>%
+  convert(num(duplex)) %>%
+  convert(num(tri_quad_plex)) %>%
+  convert(num(apt_5_9)) %>%
+  convert(num(apt_10_more)) %>%
+  convert(num(mobile_home)) %>%
+  convert(num(built_2014_later)) %>%
+  convert(num(built_2010_2013)) %>%
+  convert(num(built_2000_2009)) %>%
+  convert(num(built_1980_1999)) %>%
+  convert(num(built_1960_1979)) %>%
+  convert(num(built_1940_1959)) %>%
+  convert(num(built_1939_earlier)) %>%
+  convert(num(no_bed)) %>%
+  convert(num(one_bed)) %>%
+  convert(num(two_three_bed)) %>%
+  convert(num(four_more_bed)) %>%
+  convert(num(no_veh)) %>%
+  convert(num(one_veh)) %>%
+  convert(num(two_veh)) %>%
+  convert(num(three_more_veh)) %>%
+  convert(num(gas_pipe_heat)) %>%
+  convert(num(gas_tank_heat)) %>%
+  convert(num(elec_heat)) %>%
+  convert(num(oil_heat)) %>%
+  convert(num(coal_heat)) %>%
+  convert(num(other_heat)) %>%
+  convert(num(no_heat))
+```
+
+```{r process tract-level occupancy/tenure table}
+#remove and rename columns
+View(data.frame(colnames(tract_occ)))
+
+##rename variables
+tract_occ = tract_occ %>% 
+  rename(geog = `Geography`, tract = `Geographic Area Name`, occ_total = `Estimate!!Total:`, owner_occ = `Estimate!!Total:!!Owner occupied`, renter_occ = `Estimate!!Total:!!Renter occupied`)
+
+##remove variables
+tract_occ = tract_occ %>% 
+ select(c(geog, tract, occ_total, owner_occ, renter_occ))
+
+#convert pop to numeric
+tract_occ = tract_occ %>%
+  convert(num(occ_total)) %>%
+  convert(num(owner_occ)) %>%
+  convert(num(renter_occ))
+```
+
+```{r process tract-level language table}
+#remove and rename columns
+View(data.frame(colnames(tract_lang)))
+
+##rename variables
+tract_lang = tract_lang %>% 
+  rename(geog = `Geography`, tract = `Geographic Area Name`, pop_5_over = `Estimate!!Total!!Population 5 years and over`, english_only = `Estimate!!Total!!Population 5 years and over!!Speak only English`, spanish = `Estimate!!Total!!Population 5 years and over!!SPEAK A LANGUAGE OTHER THAN ENGLISH!!Spanish`, indo_euro_lang = `Estimate!!Total!!Population 5 years and over!!SPEAK A LANGUAGE OTHER THAN ENGLISH!!Other Indo-European languages`, asia_pacific_lang = `Estimate!!Total!!Population 5 years and over!!SPEAK A LANGUAGE OTHER THAN ENGLISH!!Asian and Pacific Island languages`, other_lang = `Estimate!!Total!!Population 5 years and over!!SPEAK A LANGUAGE OTHER THAN ENGLISH!!Other languages`)
+
+##remove variables
+tract_lang = tract_lang %>% 
+ select(c(geog, tract, pop_5_over, english_only, spanish, indo_euro_lang, asia_pacific_lang, other_lang))
+
+#convert pop to numeric
+tract_lang = tract_lang %>%
+  convert(num(pop_5_over)) %>%
+  convert(num(english_only)) %>%
+  convert(num(spanish)) %>%
+  convert(num(indo_euro_lang)) %>%
+  convert(num(asia_pacific_lang)) %>%
+  convert(num(other_lang))
+```
+
+```{r join tract census tables into one table}
+#remove and rename columns
+#join tables
+tract_table = left_join(tract_race, tract_income, by = "geog") %>% 
+  left_join(tract_social, by = "geog") %>% 
+  left_join(tract_econ, by = "geog") %>% 
+  left_join(tract_housing, by = "geog") %>% 
+  left_join(tract_occ, by = "geog") %>% 
+  left_join(tract_lang, by = "geog")
+
+tract_table = tract_table %>% 
+  select(-contains(c("tract.x.x", "tract.y"))) %>% 
+  select(-c(`tract`))%>% 
+  rename(tract = tract.x)
+```
+
+
+
+
+
+
+
+
+
+```{r join census table to mcmen tracts}
+#prepare GEOID for tracts table
+tract_table = tract_table %>% 
+  mutate(GEOID = str_replace_all(geog, "1400000US", ""))
+
+#perform join
+mcmen_tract = left_join(mcmen_tract, tract_table, by = "GEOID")
+```
+
+```{r generate tract level statistics for mcmen tract}
+#view columns to get names for later code
+View(data.frame(colnames(mcmen_tract)))
+
+#summarize to obtain percents
+mcmen_table = mcmen_tract %>% 
+  select(-c(STATEFP,COUNTYFP, TRACTCE, GEOID, NAME, NAMELSAD,
+            MTFCC, FUNCSTAT,INTPTLAT, INTPTLON, geog, tract)) %>% 
+  rename(land_area = ALAND, area_water = AWATER) %>%
+  mutate(dataset = "mcmens")
+  
+mcmen_table = mcmen_table %>% 
+  group_by(dataset) %>% 
+  summarise(across(land_area:other_lang, sum))
+
+#calculate percentages
+mcmen_table = mcmen_table %>% 
+  rename(race_total = total) %>% 
+  mutate(hispanic_percent = hispanic/race_total) %>%
+  mutate(white_nonh_percent = white_nonh/race_total) %>%
+  mutate(black_nonh_percent = black_nonh/race_total) %>%
+  mutate(amind_nonh_percent = amind_nonh/race_total) %>%
+  mutate(asian_nonh_percent = asian_nonh/race_total) %>%
+  mutate(pacific_nonh_percent = pacific_nonh/race_total) %>%
+  mutate(other_nonh_percent = other_nonh/race_total) %>%
+  mutate(mult_nonh_percent = mult_nonh/race_total) %>%
+  mutate(inc_less_10k_percent = inc_less_10k/inc_total) %>%
+  mutate(inc_10_15k_percent = inc_10_15k/inc_total) %>%
+  mutate(inc_15_20k_percent = inc_15_20k/inc_total) %>%
+  mutate(inc_20_25k_percent = inc_20_25k/inc_total) %>%
+  mutate(inc_25_30k_percent = inc_25_30k/inc_total) %>%
+  mutate(inc_30_35k_percent = inc_30_35k/inc_total) %>%
+  mutate(inc_35_40k_percent = inc_35_40k/inc_total) %>%
+  mutate(inc_40_45k_percent = inc_40_45k/inc_total) %>%
+  mutate(inc_45_50k_percent = inc_45_50k/inc_total) %>%
+  mutate(inc_50_60k_percent = inc_50_60k/inc_total) %>%
+  mutate(inc_60_75k_percent = inc_60_75k/inc_total) %>%
+  mutate(inc_75_100k_percent = inc_75_100k/inc_total) %>%
+  mutate(inc_100_125k_percent = inc_100_125k/inc_total) %>%
+  mutate(inc_125_150k_percent = inc_125_150k/inc_total) %>%
+  mutate(inc_150_200k_percent = inc_150_200k/inc_total) %>%
+  mutate(inc_200k_more_percent = inc_200k_more/inc_total) %>%
+  mutate(less_than_9_percent = less_than_9/ed_total) %>%
+  mutate(some_hs_percent = some_hs/ed_total) %>%
+  mutate(hs_grad_percent = hs_grad/ed_total) %>%
+  mutate(some_college_percent = some_college/ed_total) %>%
+  mutate(associate_percent = associate/ed_total) %>%
+  mutate(bachelors_percent = bachelors/ed_total) %>%
+  mutate(grad_percent = grad/ed_total) %>%
+  mutate(hs_higher_percent = hs_higher/ed_total) %>%
+  mutate(bachelors_higher_percent = bachelors_higher/ed_total) %>%
+  mutate(veteran_percent = veteran/vet_status_total) %>%
+  mutate(disabled_percent = disabled/disabled_status_total) %>%
+  mutate(same_house_percent = same_house/residence_total) %>%
+  mutate(same_county_percent = same_county/residence_total) %>%
+  mutate(diff_county_percent = diff_county/residence_total) %>%
+  mutate(diff_state_percent = diff_state/residence_total) %>%
+  mutate(abroad_percent = abroad/residence_total) %>%
+  mutate(born_same_state_percent = born_same_state/place_total) %>%
+  mutate(born_diff_state_percent = born_diff_state/place_total) %>%
+  mutate(born_us_other_percent = born_us_other/place_total) %>%
+  mutate(born_abroad_percent = born_abroad/place_total) %>%
+  mutate(with_comp_percent = with_comp/comp_total) %>%
+  mutate(with_broadband_percent = with_broadband/comp_total) %>%
+  mutate(commute_drive_alone_percent = commute_drive_alone/commute_total) %>%
+  mutate(commute_carpool_percent = commute_carpool/commute_total) %>%
+  mutate(commute_transit_percent = commute_transit/commute_total) %>%
+  mutate(commute_walk_percent = commute_walk/commute_total) %>%
+  mutate(commute_other_percent = commute_other/commute_total) %>%
+  mutate(commute_wfh_percent = commute_wfh/commute_total) %>%
+  mutate(earnings_percent = earnings/inc_ben_total) %>%
+  mutate(soc_sec_percent = soc_sec/inc_ben_total) %>%
+  mutate(retirement_inc_percent = retirement_inc/inc_ben_total) %>%
+  mutate(supp_sec_percent = supp_sec/inc_ben_total) %>%
+  mutate(cash_assist_percent = cash_assist/inc_ben_total) %>%
+  mutate(food_stamp_percent = food_stamp/inc_ben_total) %>%
+  mutate(private_ins_percent = private_ins/insurance_total) %>%
+  mutate(public_ins_percent = public_ins/insurance_total) %>%
+  mutate(no_ins_percent = no_ins/insurance_total) %>%
+  mutate(sfh_percent = sfh/housing_units) %>%
+  mutate(sf_attached_percent = sf_attached/housing_units) %>%
+  mutate(duplex_percent = duplex/housing_units) %>%
+  mutate(tri_quad_plex_percent = tri_quad_plex/housing_units) %>%
+  mutate(apt_5_9_percent = apt_5_9/housing_units) %>%
+  mutate(apt_10_more_percent = apt_10_more/housing_units) %>%
+  mutate(mobile_home_percent = mobile_home/housing_units) %>%
+  mutate(built_2014_later_percent = built_2014_later/housing_units) %>%
+  mutate(built_2010_2013_percent = built_2010_2013/housing_units) %>%
+  mutate(built_2000_2009_percent = built_2000_2009/housing_units) %>%
+  mutate(built_1980_1999_percent = built_1980_1999/housing_units) %>%
+  mutate(built_1960_1979_percent = built_1960_1979/housing_units) %>%
+  mutate(built_1940_1959_percent = built_1940_1959/housing_units) %>%
+  mutate(built_1939_earlier_percent = built_1939_earlier/housing_units) %>%
+  mutate(no_bed_percent = no_bed/housing_units) %>%
+  mutate(one_bed_percent = one_bed/housing_units) %>%
+  mutate(two_three_bed_percent = two_three_bed/housing_units) %>%
+  mutate(four_more_bed_percent = four_more_bed/housing_units) %>%
+  mutate(no_veh_percent = no_veh/housing_units) %>%
+  mutate(one_veh_percent = one_veh/housing_units) %>%
+  mutate(two_veh_percent = two_veh/housing_units) %>%
+  mutate(three_more_veh_percent = three_more_veh/housing_units) %>%
+  mutate(gas_pipe_heat_percent = gas_pipe_heat/housing_units) %>%
+  mutate(gas_tank_heat_percent = gas_tank_heat/housing_units) %>%
+  mutate(elec_heat_percent = elec_heat/housing_units) %>%
+  mutate(oil_heat_percent = oil_heat/housing_units) %>%
+  mutate(coal_heat_percent = coal_heat/housing_units) %>%
+  mutate(other_heat_percent = other_heat/housing_units) %>%
+  mutate(no_heat_percent = no_heat/housing_units) %>%
+  mutate(owner_occ_percent = owner_occ/occ_total) %>%
+  mutate(renter_occ_percent = renter_occ/occ_total) %>%
+  mutate(english_only_percent = english_only/pop_5_over) %>%
+  mutate(spanish_percent = spanish/pop_5_over) %>%
+  mutate(indo_euro_lang_percent = indo_euro_lang/pop_5_over) %>%
+  mutate(asia_pacific_lang_percent = asia_pacific_lang/pop_5_over) %>%
+  mutate(other_lang_percent = other_lang/pop_5_over) %>% 
+  relocate(dataset)
+```
+
+
+
+
+
+
+```{r identify urban tracts and find urban area stats}
+#bring in urban areas dataset
+urban_file = 'tl_2023_us_uac20.shp'
+urban_shape = read_sf(file.path(paste0(project_dir, "/Data/Census Shapefiles/tl_2023_us_uac20/", urban_file)))
+
+#extract or and wa urban areas
+urban_shape = urban_shape %>%
+  filter(grepl('OR|WA', NAME20)) %>% 
+  filter(!grepl('ID', NAME20))
+
+#transform urban areas to spatial
+urban_shape = as(urban_shape, "Spatial")
+
+
+#transform mcmen tracts to spatial
+mcmen_tract = as(mcmen_tract, "Spatial")
+
+#count locations in each tract
+mcmen_tract = sp::over(mcmen_loc, pnw_tracts)
+table(mcmen_tract$NAMELSAD)
+```
+
+```{r generate tract level statistics}
+#view columns to get names for later code
+View(data.frame(colnames(tract_table)))
+
+#rename one table
+tract_table = tract_table %>% 
+  rename(race_total = total)
+
+#calculate percentages
+tract_table = tract_table %>% 
+  mutate(hispanic_percent = hispanic/race_total) %>%
+  mutate(white_nonh_percent = white_nonh/race_total) %>%
+  mutate(black_nonh_percent = black_nonh/race_total) %>%
+  mutate(amind_nonh_percent = amind_nonh/race_total) %>%
+  mutate(asian_nonh_percent = asian_nonh/race_total) %>%
+  mutate(pacific_nonh_percent = pacific_nonh/race_total) %>%
+  mutate(other_nonh_percent = other_nonh/race_total) %>%
+  mutate(mult_nonh_percent = mult_nonh/race_total) %>%
+  mutate(inc_less_10k_percent = inc_less_10k/inc_total) %>%
+  mutate(inc_10_15k_percent = inc_10_15k/inc_total) %>%
+  mutate(inc_15_20k_percent = inc_15_20k/inc_total) %>%
+  mutate(inc_20_25k_percent = inc_20_25k/inc_total) %>%
+  mutate(inc_25_30k_percent = inc_25_30k/inc_total) %>%
+  mutate(inc_30_35k_percent = inc_30_35k/inc_total) %>%
+  mutate(inc_35_40k_percent = inc_35_40k/inc_total) %>%
+  mutate(inc_40_45k_percent = inc_40_45k/inc_total) %>%
+  mutate(inc_45_50k_percent = inc_45_50k/inc_total) %>%
+  mutate(inc_50_60k_percent = inc_50_60k/inc_total) %>%
+  mutate(inc_60_75k_percent = inc_60_75k/inc_total) %>%
+  mutate(inc_75_100k_percent = inc_75_100k/inc_total) %>%
+  mutate(inc_100_125k_percent = inc_100_125k/inc_total) %>%
+  mutate(inc_125_150k_percent = inc_125_150k/inc_total) %>%
+  mutate(inc_150_200k_percent = inc_150_200k/inc_total) %>%
+  mutate(inc_200k_more_percent = inc_200k_more/inc_total) %>%
+  mutate(less_than_9_percent = less_than_9/ed_total) %>%
+  mutate(some_hs_percent = some_hs/ed_total) %>%
+  mutate(hs_grad_percent = hs_grad/ed_total) %>%
+  mutate(some_college_percent = some_college/ed_total) %>%
+  mutate(associate_percent = associate/ed_total) %>%
+  mutate(bachelors_percent = bachelors/ed_total) %>%
+  mutate(grad_percent = grad/ed_total) %>%
+  mutate(hs_higher_percent = hs_higher/ed_total) %>%
+  mutate(bachelors_higher_percent = bachelors_higher/ed_total) %>%
+  mutate(veteran_percent = veteran/vet_status_total) %>%
+  mutate(disabled_percent = disabled/disabled_status_total) %>%
+  mutate(same_house_percent = same_house/residence_total) %>%
+  mutate(same_county_percent = same_county/residence_total) %>%
+  mutate(diff_county_percent = diff_county/residence_total) %>%
+  mutate(diff_state_percent = diff_state/residence_total) %>%
+  mutate(abroad_percent = abroad/residence_total) %>%
+  mutate(born_same_state_percent = born_same_state/place_total) %>%
+  mutate(born_diff_state_percent = born_diff_state/place_total) %>%
+  mutate(born_us_other_percent = born_us_other/place_total) %>%
+  mutate(born_abroad_percent = born_abroad/place_total) %>%
+  mutate(with_comp_percent = with_comp/comp_total) %>%
+  mutate(with_broadband_percent = with_broadband/comp_total) %>%
+  mutate(commute_drive_alone_percent = commute_drive_alone/commute_total) %>%
+  mutate(commute_carpool_percent = commute_carpool/commute_total) %>%
+  mutate(commute_transit_percent = commute_transit/commute_total) %>%
+  mutate(commute_walk_percent = commute_walk/commute_total) %>%
+  mutate(commute_other_percent = commute_other/commute_total) %>%
+  mutate(commute_wfh_percent = commute_wfh/commute_total) %>%
+  mutate(earnings_percent = earnings/inc_ben_total) %>%
+  mutate(soc_sec_percent = soc_sec/inc_ben_total) %>%
+  mutate(retirement_inc_percent = retirement_inc/inc_ben_total) %>%
+  mutate(supp_sec_percent = supp_sec/inc_ben_total) %>%
+  mutate(cash_assist_percent = cash_assist/inc_ben_total) %>%
+  mutate(food_stamp_percent = food_stamp/inc_ben_total) %>%
+  mutate(private_ins_percent = private_ins/insurance_total) %>%
+  mutate(public_ins_percent = public_ins/insurance_total) %>%
+  mutate(no_ins_percent = no_ins/insurance_total) %>%
+  mutate(sfh_percent = sfh/housing_units) %>%
+  mutate(sf_attached_percent = sf_attached/housing_units) %>%
+  mutate(duplex_percent = duplex/housing_units) %>%
+  mutate(tri_quad_plex_percent = tri_quad_plex/housing_units) %>%
+  mutate(apt_5_9_percent = apt_5_9/housing_units) %>%
+  mutate(apt_10_more_percent = apt_10_more/housing_units) %>%
+  mutate(mobile_home_percent = mobile_home/housing_units) %>%
+  mutate(built_2014_later_percent = built_2014_later/housing_units) %>%
+  mutate(built_2010_2013_percent = built_2010_2013/housing_units) %>%
+  mutate(built_2000_2009_percent = built_2000_2009/housing_units) %>%
+  mutate(built_1980_1999_percent = built_1980_1999/housing_units) %>%
+  mutate(built_1960_1979_percent = built_1960_1979/housing_units) %>%
+  mutate(built_1940_1959_percent = built_1940_1959/housing_units) %>%
+  mutate(built_1939_earlier_percent = built_1939_earlier/housing_units) %>%
+  mutate(no_bed_percent = no_bed/housing_units) %>%
+  mutate(one_bed_percent = one_bed/housing_units) %>%
+  mutate(two_three_bed_percent = two_three_bed/housing_units) %>%
+  mutate(four_more_bed_percent = four_more_bed/housing_units) %>%
+  mutate(no_veh_percent = no_veh/housing_units) %>%
+  mutate(one_veh_percent = one_veh/housing_units) %>%
+  mutate(two_veh_percent = two_veh/housing_units) %>%
+  mutate(three_more_veh_percent = three_more_veh/housing_units) %>%
+  mutate(gas_pipe_heat_percent = gas_pipe_heat/housing_units) %>%
+  mutate(gas_tank_heat_percent = gas_tank_heat/housing_units) %>%
+  mutate(elec_heat_percent = elec_heat/housing_units) %>%
+  mutate(oil_heat_percent = oil_heat/housing_units) %>%
+  mutate(coal_heat_percent = coal_heat/housing_units) %>%
+  mutate(other_heat_percent = other_heat/housing_units) %>%
+  mutate(no_heat_percent = no_heat/housing_units) %>%
+  mutate(owner_occ_percent = owner_occ/occ_total) %>%
+  mutate(renter_occ_percent = renter_occ/occ_total) %>%
+  mutate(english_only_percent = english_only/pop_5_over) %>%
+  mutate(spanish_percent = spanish/pop_5_over) %>%
+  mutate(indo_euro_lang_percent = indo_euro_lang/pop_5_over) %>%
+  mutate(asia_pacific_lang_percent = asia_pacific_lang/pop_5_over) %>%
+  mutate(other_lang_percent = other_lang/pop_5_over)
+```
+
+
+
 
 
 
