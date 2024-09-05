@@ -1,0 +1,6 @@
+"0","library(librarian)"
+"0",""
+"0","shelf(tidyverse, data.table, devtools, ggplot2, ggmap, htmltools, htmlwidgets, "
+"0","      readxl, shiny, tibble, sf, tmap, sp, janitor, hablar)"
+"0",""
+"0","project_dir = getwd()"
