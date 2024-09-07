@@ -951,39 +951,65 @@ urban_shape = urban_shape %>%
   filter(grepl('OR|WA', NAME20)) %>% 
   filter(!grepl('ID', NAME20))
 
+urban_agg = urban_shape %>% 
+  st_union() %>% 
+  st_cast("POLYGON") %>% 
+  as.data.frame(urban_shape) %>% 
+  mutate(urban = "urban") %>% 
+  st_sf()
+
 #isolate urban areas with mcmenamins 
-urban_mcmen_shape = urban_shape[mcmen_loc, ]
+urban_mcmen_shape = urban_shape[mcmen_loc, ] %>% 
+  st_union() %>% 
+  st_cast("POLYGON") %>% 
+  as.data.frame(urban_shape) %>% 
+  mutate(urban_mc_men = "urban with mcmens") %>% 
+  st_sf()
 urban_mcmen = data.frame(urban_mcmen_shape)
 
 #isolate urban areas with no mcmenamins 
-urban_no_mcmen_shape = st_sf(urban_shape[is.na(sp::over(as_Spatial(urban_shape), sp::geometry(as_Spatial(mcmen_loc)))),])
-
+urban_no_mcmen_shape = st_sf(urban_shape[is.na(sp::over(as_Spatial(urban_shape), sp::geometry(as_Spatial(mcmen_loc)))),]) %>% 
+  st_union() %>% 
+  st_cast("POLYGON") %>% 
+  as.data.frame(urban_shape) %>% 
+  mutate(urban_mc_men = "urban no mcmens") %>% 
+  st_sf()
 urban_no_mcmen = data.frame(urban_no_mcmen_shape)
 
-#create tract based urban tables
-##prepare tract
-pnw_tracts = pnw_tracts %>% 
-  mutate(area_m2 = ALAND + AWATER) %>% 
-  left_join(tract_table, by = "GEOID")
 
 ##all urban
 ###join urban areas to tracts
-urban_agg <- aggregate(urban_shape, list(urban_shape$NAME20), first)
+or_tracts_shape = or_tracts_shape %>% 
+  dplyr::mutate(area_km2 = (ALAND + AWATER)/1000000)
+urban_or_tracts = or_tracts_shape[urban_agg,]
+urban_oregon_split = st_intersection(urban_or_tracts, urban_agg)
 
-urban_tracts = st_join(urban_agg, pnw_tracts) %>% aggregate(list(urban_tracts$NAME20, urban_tracts$NAME), first)
+wa_tracts_shape = wa_tracts_shape %>% 
+  dplyr::mutate(area_km2 = (ALAND + AWATER)/1000000)
+urban_wa_tracts = wa_tracts_shape[urban_agg,]
+urban_wash_split = st_intersection(urban_wa_tracts, urban_agg)
 
-urban_tracts = urban_tracts %>% mutate(area_split = st_area())
-
-a = st_area(urban_shape)
-b = st_area(pnw_tracts)
-c = st_area(urban_agg)
-d = st_area(urban_tracts)
+split_tracts = bind_rows(urban_oregon_split, urban_wash_split)
 
 ##urban areas w mcmenamins
 ###join urban areas to tracts
+urban_mcmen_or_tracts = or_tracts_shape[urban_mcmen_shape,]
+urban_mcmen_oregon_split = st_intersection(urban_or_tracts, urban_mcmen_shape)
+
+urban_mcmen_wa_tracts = wa_tracts_shape[urban_no_mcmen_shape,]
+urban_mcmen_wash_split = st_intersection(urban_wa_tracts, urban_mcmen)
+
+split_tracts = bind_rows(urban_mcmen_oregon_split, urban_mcmen_wash_split)
 
 ##urban areas w/out mcmenamins
 ###join urban areas to tracts
+urban_no_mcmen_or_tracts = or_tracts_shape[urban_no_mcmen_shape,]
+urban_no_mcmen_oregon_split = st_intersection(urban_or_tracts, urban_no_mcmen_shape)
+
+urban_no_mcmen_wa_tracts = wa_tracts_shape[urban_no_no_mcmen_shape,]
+urban_no_mcmen_wash_split = st_intersection(urban_wa_tracts, urban_no_mcmen)
+
+split_tracts = bind_rows(urban_no_mcmen_oregon_split, urban_no_mcmen_wash_split)
 ```
 
 ```{r generate tract level statistics}
