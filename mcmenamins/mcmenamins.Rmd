@@ -15,7 +15,7 @@ rm(list = ls())
 library(librarian)
 
 shelf(tidyverse, data.table, devtools, ggplot2, ggmap, htmltools, htmlwidgets, 
-      readxl, shiny, tibble, sf, tmap, sp, janitor, hablar)
+      readxl, shiny, tibble, sf, tmap, sp, janitor, hablar, terra)
 
 project_dir = getwd()
 ```
@@ -996,20 +996,47 @@ split_tracts = bind_rows(urban_oregon_split, urban_wash_split)
 urban_mcmen_or_tracts = or_tracts_shape[urban_mcmen_shape,]
 urban_mcmen_oregon_split = st_intersection(urban_or_tracts, urban_mcmen_shape)
 
-urban_mcmen_wa_tracts = wa_tracts_shape[urban_no_mcmen_shape,]
-urban_mcmen_wash_split = st_intersection(urban_wa_tracts, urban_mcmen)
+urban_mcmen_wa_tracts = wa_tracts_shape[urban_mcmen_shape,]
+urban_mcmen_wash_split = st_intersection(urban_wa_tracts, urban_mcmen_shape)
 
-split_tracts = bind_rows(urban_mcmen_oregon_split, urban_mcmen_wash_split)
+split_mcmen_tracts = bind_rows(urban_mcmen_oregon_split, urban_mcmen_wash_split)
 
 ##urban areas w/out mcmenamins
 ###join urban areas to tracts
 urban_no_mcmen_or_tracts = or_tracts_shape[urban_no_mcmen_shape,]
 urban_no_mcmen_oregon_split = st_intersection(urban_or_tracts, urban_no_mcmen_shape)
 
-urban_no_mcmen_wa_tracts = wa_tracts_shape[urban_no_no_mcmen_shape,]
-urban_no_mcmen_wash_split = st_intersection(urban_wa_tracts, urban_no_mcmen)
+urban_no_mcmen_wa_tracts = wa_tracts_shape[urban_no_mcmen_shape,]
+urban_no_mcmen_wash_split = st_intersection(urban_wa_tracts, urban_no_mcmen_shape)
 
-split_tracts = bind_rows(urban_no_mcmen_oregon_split, urban_no_mcmen_wash_split)
+split_no_mcmen_tracts = bind_rows(urban_no_mcmen_oregon_split, urban_no_mcmen_wash_split)
+
+##clean split tracts
+split_tracts = split_tracts %>% 
+  st_collection_extract(type = "POLYGON") %>% 
+  st_make_valid() %>% 
+  dplyr::mutate(split_tracts, empty_geom = is.na(st_dimension(split_tracts)))
+
+
+any(is.na(st_dimension(split_tracts)))
+any(is.na(st_is_valid(split_tracts)))
+any(na.omit(st_is_valid(split_tracts)) == FALSE)
+
+
+
+split_mcmen_tracts = split_mcmen_tracts %>% 
+  st_collection_extract(type = "POLYGON") %>% 
+  aggregate(GEOID, first)
+
+
+split_nomcmen_tracts = split_no_mcmen_tracts %>% 
+  st_collection_extract(type = "POLYGON") %>% 
+  aggregate(GEOID, first)
+
+
+
+
+
 ```
 
 ```{r generate tract level statistics}

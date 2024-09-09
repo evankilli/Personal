@@ -1,6 +1,0 @@
-"0","urban_wa_tracts = wa_tracts_shape[urban_agg,]
-urban_wash_split = st_intersection(urban_wa_tracts, urban_agg)
-"
-"2","Warning:"
-"2"," attribute variables are assumed to be spatially constant throughout all geometries
-"
