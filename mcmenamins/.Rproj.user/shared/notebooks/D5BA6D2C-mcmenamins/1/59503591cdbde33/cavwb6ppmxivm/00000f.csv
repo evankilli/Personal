@@ -1,0 +1,6 @@
+"0","#join mcmenamins points to tract shapes"
+"0","mcmen_tract_shape = pnw_tracts[mcmen_loc, ]"
+"2","although coordinates are longitude/latitude, st_intersects assumes that they are planar
+"
+"0","#transform mcmen tracts to df"
+"0","mcmen_tract = data.frame(mcmen_tract_shape)"

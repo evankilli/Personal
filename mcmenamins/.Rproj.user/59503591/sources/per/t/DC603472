@@ -3,7 +3,7 @@
     "path": "~/GitHub/Personal/mcmenamins/mcmenamins.Rmd",
     "project_path": "mcmenamins.Rmd",
     "type": "r_markdown",
-    "hash": "110691595",
+    "hash": "2750893627",
     "contents": "",
     "dirty": false,
     "created": 1725240061399.0,
@@ -13,16 +13,16 @@
         "tempName": "Untitled1",
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "1022,27",
-        "scrollLine": "995",
-        "last_setup_crc32": "965914cba786004b"
+        "cursorPosition": "1030,0",
+        "scrollLine": "1010",
+        "last_setup_crc32": "516b82f9486e2223"
     },
-    "folds": "1041|38|1148|0|\n",
-    "lastKnownWriteTime": 1725844591,
+    "folds": "1040|38|1147|0|\n",
+    "lastKnownWriteTime": 1726117450,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1725844592055,
+    "last_content_update": 1726117450362,
     "read_only": false,
     "read_only_alternatives": []
 }

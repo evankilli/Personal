@@ -1,0 +1,41 @@
+"0","rm(list = ls(urban_shape))
+"
+"2","Warning in rm(list = ls(urban_shape)) :"
+"2"," object 'ALAND20' not found
+"
+"2","Warning in rm(list = ls(urban_shape)) :"
+"2"," object 'AWATER20' not found
+"
+"2","Warning in rm(list = ls(urban_shape)) :"
+"2"," object 'FUNCSTAT20' not found
+"
+"2","Warning in rm(list = ls(urban_shape)) :"
+"2"," object 'GEOID20' not found
+"
+"2","Warning in rm(list = ls(urban_shape)) :"
+"2"," object 'GEOIDFQ20' not found
+"
+"2","Warning in rm(list = ls(urban_shape)) :"
+"2"," object 'geometry' not found
+"
+"2","Warning in rm(list = ls(urban_shape)) :"
+"2"," object 'INTPTLAT20' not found
+"
+"2","Warning in rm(list = ls(urban_shape)) :"
+"2"," object 'INTPTLON20' not found
+"
+"2","Warning in rm(list = ls(urban_shape)) :"
+"2"," object 'LSAD20' not found
+"
+"2","Warning in rm(list = ls(urban_shape)) :"
+"2"," object 'MTFCC20' not found
+"
+"2","Warning in rm(list = ls(urban_shape)) :"
+"2"," object 'NAME20' not found
+"
+"2","Warning in rm(list = ls(urban_shape)) :"
+"2"," object 'NAMELSAD20' not found
+"
+"2","Warning in rm(list = ls(urban_shape)) :"
+"2"," object 'UACE20' not found
+"

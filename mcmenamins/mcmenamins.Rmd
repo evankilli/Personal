@@ -9,13 +9,17 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 
 rm(list = ls())
+
+
 ```
 
 ```{r load packages and define directory}
 library(librarian)
 
 shelf(tidyverse, data.table, devtools, ggplot2, ggmap, htmltools, htmlwidgets, 
-      readxl, shiny, tibble, sf, tmap, sp, janitor, hablar, terra)
+      readxl, shiny, tibble, sf, sp, janitor, hablar, terra)
+
+sf_use_s2(TRUE)
 
 project_dir = getwd()
 ```
@@ -1012,30 +1016,88 @@ urban_no_mcmen_wash_split = st_intersection(urban_wa_tracts, urban_no_mcmen_shap
 split_no_mcmen_tracts = bind_rows(urban_no_mcmen_oregon_split, urban_no_mcmen_wash_split)
 
 ##clean split tracts
-split_tracts = split_tracts %>% 
-  st_collection_extract(type = "POLYGON") %>% 
-  st_make_valid() %>% 
-  dplyr::mutate(split_tracts, empty_geom = is.na(st_dimension(split_tracts)))
+sf_use_s2(FALSE)
 
+split_tracts = split_tracts %>% 
+  st_collection_extract(type = "POLYGON")
+
+split_tracts = split_tracts %>% 
+  mutate(split_area_km2 = st_area(split_tracts)/1000000)
+
+split_tracts = split_tracts %>% 
+  st_make_valid()
 
 any(is.na(st_dimension(split_tracts)))
 any(is.na(st_is_valid(split_tracts)))
 any(na.omit(st_is_valid(split_tracts)) == FALSE)
 
+split_tracts = split_tracts %>% 
+  st_collection_extract(type = "POLYGON")
 
+split_tracts_sum = split_tracts %>% 
+  group_by(GEOID) %>% 
+  summarise(NAME = first(NAME),
+  NAMELSAD = first(NAMELSAD),
+  area_km2 = first(area_km2),
+  urban = first(urban),
+  split_area = sum(split_area_km2))
+
+##clean split MCMEN tracts
+split_mcmen_tracts = split_mcmen_tracts %>% 
+  st_collection_extract(type = "POLYGON")
 
 split_mcmen_tracts = split_mcmen_tracts %>% 
-  st_collection_extract(type = "POLYGON") %>% 
-  aggregate(GEOID, first)
+  mutate(split_mcmen_area_km2 = st_area(split_mcmen_tracts)/1000000)
+
+split_mcmen_tracts = split_mcmen_tracts %>% 
+  st_make_valid()
+
+any(is.na(st_dimension(split_mcmen_tracts)))
+any(is.na(st_is_valid(split_mcmen_tracts)))
+any(na.omit(st_is_valid(split_mcmen_tracts)) == FALSE)
+
+split_mcmen_tracts = split_mcmen_tracts %>% 
+  st_collection_extract(type = "POLYGON")
+
+split_mcmen_tracts_sum = split_mcmen_tracts %>% 
+  group_by(GEOID) %>% 
+  summarise(NAME = first(NAME),
+  NAMELSAD = first(NAMELSAD),
+  area_km2 = first(area_km2),
+  urban_mc_men = first(urban_mc_men),
+  split_mcmen_area = sum(split_mcmen_area_km2))
 
 
-split_nomcmen_tracts = split_no_mcmen_tracts %>% 
-  st_collection_extract(type = "POLYGON") %>% 
-  aggregate(GEOID, first)
+##clean split no mcmen tracts
+split_no_mcmen_tracts = split_no_mcmen_tracts %>% 
+  st_collection_extract(type = "POLYGON")
+
+split_no_mcmen_tracts = split_no_mcmen_tracts %>% 
+  mutate(split_no_mcmen_area_km2 = st_area(split_no_mcmen_tracts)/1000000)
+
+split_no_mcmen_tracts = split_no_mcmen_tracts %>% 
+  st_make_valid()
+
+any(is.na(st_dimension(split_no_mcmen_tracts)))
+any(is.na(st_is_valid(split_no_mcmen_tracts)))
+any(na.omit(st_is_valid(split_no_mcmen_tracts)) == FALSE)
+
+split_no_mcmen_tracts = split_no_mcmen_tracts %>% 
+  st_collection_extract(type = "POLYGON")
+
+split_no_mcmen_tracts_sum = split_no_mcmen_tracts %>% 
+  group_by(GEOID) %>% 
+  summarise(NAME = first(NAME),
+  NAMELSAD = first(NAMELSAD),
+  area_km2 = first(area_km2),
+  urban_mc_men = first(urban_mc_men),
+  split_no_mcmen_area = sum(split_no_mcmen_area_km2))
 
 
-
-
+#write out so I don't have to repeat steps!
+st_write(split_tracts_sum, paste0(project_dir, "/split_tracts_sum.shp"))
+st_write(split_mcmen_tracts_sum, paste0(project_dir, "split_mcmen_tracts_sum.shp"))
+st_write(split_no_mcmen_tracts_sum, paste0(project_dir, "split_nomcmen_tracts_sum.shp"))
 
 ```
 
