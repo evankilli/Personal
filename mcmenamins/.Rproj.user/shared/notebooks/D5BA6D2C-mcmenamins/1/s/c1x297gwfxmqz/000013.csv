@@ -1,0 +1,7 @@
+"0","urban_stat_agg = urban_stat %>% 
+  st_drop_geometry() %>% 
+  aggregate(by = c(urban_stat$urban), FUN = sum)
+"
+"2","Error in aggregate.data.frame(., by = c(urban_stat$urban), FUN = sum) : 
+  'by' must be a list
+"

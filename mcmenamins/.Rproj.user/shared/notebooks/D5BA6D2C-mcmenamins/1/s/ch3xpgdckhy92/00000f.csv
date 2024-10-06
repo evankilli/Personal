@@ -1,6 +1,0 @@
-"0","#prepare GEOID for tracts table"
-"0","tract_table = tract_table %>% "
-"0","  mutate(GEOID = str_replace_all(geog, ""1400000US"", """"))"
-"0",""
-"0","#perform join"
-"0","mcmen_tract = left_join(mcmen_tract, tract_table, by = ""GEOID"")"
