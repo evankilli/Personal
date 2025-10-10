@@ -1,0 +1,7 @@
+"0","urban_stat_agg = urban_stat %>% 
+  st_drop_geometry() %>% 
+  summarise(by = c(urban))
+"
+"2","Error in urban_stat %>% st_drop_geometry() %>% summarise(by = c(urban)) : 
+  could not find function ""%>%""
+"

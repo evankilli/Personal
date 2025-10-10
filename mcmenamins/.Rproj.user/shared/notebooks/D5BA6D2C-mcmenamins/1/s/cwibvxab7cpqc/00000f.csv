@@ -1,0 +1,8 @@
+"0","#join tract tables to all urban tracts
+urban_stat = left_join(split_tracts_sum, tract_table, join_by(GEOID == GEOID), keep = FALSE)
+urban_mcmen_stat = left_join(split_mcmen_tracts_sum, tract_table, join_by(GEOID == GEOID), keep = FALSE)
+urban_no_mcmen_stat = left_join(split_no_mcmen_tracts_sum, tract_table, join_by(GEOID == GEOID), keep = FALSE)
+```
+"
+"2","Error: attempt to use zero-length variable name
+"
