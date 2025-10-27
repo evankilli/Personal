@@ -27,6 +27,7 @@ Data I'll need includes:
   1. Put all the pizza spots into a CSV for geocoding - include name, city, state, country (plus category for further analysis)
   1. Get Google Maps API key; tested with OSM geocoding, but didn't get the results without an address (and I don't want to search for 100 street addresses if I don't need to!)
   1. Use MMQGIS geocoding tool to obtain points for all 100 spots
+  1. Clean out duplicate spots (two found for Jordan's, )
   1. Save out layer of pizza spots
 1. Prepare pizza spots further - since I want to do separate maps as well for the various types of pizza, we'll want separate layers for each type as well (I think)
   1. Extract by attribute for each type
@@ -45,3 +46,11 @@ Data I'll need includes:
   1. Join local roads and state highways into one layer
     1. Save out joined roads layer
 1. Perform network analysis by points to create isochrone for each point
+
+
+## sources
+- [CT Pizza Trail](https://ctvisit.com/articles/connecticut-pizza-trail)
+- [CT Roads](https://magic.lib.uconn.edu/connecticut_data.html)
+  - [Info about road classifications](https://www2.census.gov/geo/pdfs/reference/mtfccs.pdf)
+- Urban areas and state boundaries were found through [TIGER/Line](https://www.census.gov/cgi-bin/geo/shapefiles/index.php)
+- [Guidance around speed limits](https://portal.ct.gov/dot/-/media/dot/osta/guidelines-for-establishing-speed-limits-in-the-state-of-connecticut-102021.pdf)
