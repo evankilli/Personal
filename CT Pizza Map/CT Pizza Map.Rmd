@@ -1,0 +1,224 @@
+---
+title: "CT Pizza Map"
+author: "Evan Killion"
+date: "2026-05-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+First, going to do some set up, including:
+- Cleaning environment
+- Setting up packages
+
+```{r project setup}
+## Remove any lists in environment
+rm(list = ls())
+
+## Packages
+library(dplyr)
+library(tidyr)
+library(sf)
+library(sfnetworks)
+library(dodgr)
+library(stringr)
+
+## Directories
+project_dir = paste0(getwd(), "/")
+output_dir = paste0(getwd(), "/Outputs/")
+```
+
+## Data
+
+Now, I need to read in data. At first, I'll only test the Apizza joints (less combinations), but I'll read everything in for good measure:
+- Road Network
+- Census blocks
+- Table of block-apizza restaurant correspondences
+- All pizza joints (not right now)
+- Apizza pizza joints
+- Greek pizza joints (not right now)
+- Neapolitan pizza joints (not right now)
+- Tavern pizza joints (not right now)
+- Thick pizza joints (not right now)
+- 
+
+
+```{r read data}
+
+## Read in road network
+roads = st_read(paste0(project_dir, "CT Roads with Speed Limits Exploded.gpkg"))
+
+## Read in Pizza joints
+# all_pizza = st_read(paste0(project_dir, "Pizza Spots Fixed Locations.gpkg"))
+apizza = st_read(paste0(project_dir, "Apizza Pizza Shops.gpkg"))
+# greek = st_read(paste0(project_dir, "Greek Pizza Shops.gpkg"))
+# neapolitan = st_read(paste0(project_dir, "Neapolitan Pizza Shops.gpkg"))
+# tavern = st_read(paste0(project_dir, "Tavern Pizza Shops.gpkg"))
+# thick = st_read(paste0(project_dir, "Thick Pizza Shops.gpkg"))
+
+## Read in census blocks
+census_blocks = st_read(paste0(project_dir, "Clean Census Blocks.gpkg"))
+
+## Read in correspondence table
+blocks_apizza = read.csv(paste0(project_dir, "Blocks with Apizza Joints.csv"), header = TRUE, check.names=FALSE)
+
+## Read in state boundary file
+state_shape = st_read(paste0(project_dir, "/tl_2025_us_state/tl_2025_us_state.shp"))
+```
+
+## Shapefiles
+
+Next, I'm going to work on prepping shapefiles for processing
+
+```{r shapefiles}
+
+# Pizza
+apizza = apizza %>% 
+  st_transform(4326) %>% 
+  mutate(id = row_number()) %>% 
+  select(unique_id, Name, geom) %>% 
+  rename(pizza_id = unique_id)
+
+# Census geog
+census_blocks = census_blocks %>% 
+  st_transform(4326) %>%
+  st_centroid() %>% 
+  select(GEOID20, geom)
+
+# CT boundary
+conn = state_shape %>% 
+  filter(STUSPS == "CT")
+
+```
+
+## Correspondence table
+
+After processing the shapefiles a bit further to get them ready for network analysis, I'm going to work on getting the correspondence table ready to be used as a filter for network analysis.
+
+```{r correspondence}
+
+# Remove extraneous variables
+blocks_apizza = blocks_apizza %>% 
+  select(GEOID20, Name, unique_id) %>% 
+  rename(pizza_id = unique_id) %>% 
+  mutate(GEOID20 = str_pad(GEOID20, width = 15, pad = "0"))
+
+# Check that variables line up
+## Variable type
+class(blocks_apizza$GEOID20) == class(census_blocks$GEOID20)
+class(blocks_apizza$pizza_id) == class(apizza$pizza_id)
+
+## Spot check values
+head(blocks_apizza$GEOID20) %in% census_blocks$GEOID20
+head(blocks_apizza$pizza_id) %in% apizza$pizza_id
+```
+
+# Network prep
+
+Here comes the fun part! Now that I've got all my files loaded in, I'll use dodgr to perform network analysis. I created a table of the census blocks with the five closest pizza joints in QGIS so I can limit the possibilities and I've made sure my road network has speed (and now a weighted distance based on that) to get closer to true travel times. 
+
+```{r network}
+
+# Road network
+## CRS
+roads = roads %>% 
+  st_transform(4326)
+
+## Find length
+roads = roads %>% 
+  ### Needs to be in projected CRS for length to work
+  mutate(d = as.numeric(st_length(st_transform(., 6433)))) %>% 
+  ### Transform back
+  st_transform(4326) %>% 
+  mutate(d_weighted = d/(speed*0.44704))
+
+## Roads to network, then to edges and nodes
+### Network
+net = as_sfnetwork(roads, directed = FALSE)
+
+### Edges
+edges = net %>% 
+  activate("edges") %>% 
+  st_as_sf() %>% 
+  mutate(
+    from_id = as.character(from),
+    to_id = as.character(to)
+  ) %>% 
+  st_drop_geometry() %>% 
+  select(from_id, to_id, d, d_weighted)
+  
+### Nodes
+nodes = net %>% 
+  activate("nodes") %>% 
+  st_as_sf() %>% 
+  mutate(node_id = as.character(row_number())) %>% 
+  bind_cols(st_coordinates(.)) %>%
+  st_drop_geometry() %>% 
+  select(node_id, X, Y) %>% 
+  rename(lon = X, lat = Y)
+  
+### Add node coords to edges table 
+edges = edges %>% 
+  left_join(nodes, by = c("from_id" = "node_id")) %>% 
+  rename(from_lon = lon, from_lat = lat) %>% 
+  left_join(nodes, by = c("to_id" = "node_id")) %>% 
+  rename(to_lon = lon, to_lat = lat)
+```
+
+# Network Analysis
+
+Now that the graph is prepped, I can go into actually computing the distances between places from the table!
+
+```{r network analysis}
+
+# Define origins
+## Put in order of correspondence table so that I have two ordered matrices of coords for pairwise distance matrix
+origin_coords = blocks_apizza %>% 
+  left_join(census_blocks, by = "GEOID20") %>% 
+  st_as_sf() %>% 
+  st_coordinates()
+
+# Define destinations
+## Put in order of correspondence table so that I have two ordered matrices of coords for pairwise distance matrix
+dest_coords = blocks_apizza %>% 
+  left_join(apizza, by = "pizza_id") %>% 
+  st_as_sf() %>% 
+  st_coordinates()
+
+# Run network analysis matrix
+dist_matrix = dodgr_distances(
+  edges, 
+  from = origin_coords,
+  to = dest_coords,
+  ## Running pairwise to only test combinations in correspondence table
+  pairwise = TRUE
+)
+
+```
+
+# Final pairs
+
+Now that the actual network analysis is out of the way, I need to find the final pair for each block. I'll join the ordered result back onto the correspondence table, group by shortest distance (weighted by time), 
+
+```{r final pairs}
+
+
+
+```
+
+# Visualization
+
+With the final pairs produced, I'll want to create a leaflet map with:
+- CT state boundary
+- Blocks colored by closest restaurant (no outlines around blocks so as to make it look clean)
+- Restaurant points
+
+```{r leaflet maps}
+
+
+
+```
