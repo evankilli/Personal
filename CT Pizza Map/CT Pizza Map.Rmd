@@ -166,7 +166,47 @@ edges = edges %>%
   left_join(nodes, by = c("from_id" = "node_id")) %>% 
   rename(from_lon = lon, from_lat = lat) %>% 
   left_join(nodes, by = c("to_id" = "node_id")) %>% 
-  rename(to_lon = lon, to_lat = lat)
+  rename(to_lon = lon, to_lat = lat) %>% 
+  mutate(edge_id = row_number()) %>% 
+  relocate(edge_id, .before = from_id)
+
+### Filter out unconnected edges
+edges_connected_test = dodgr_components(edges) 
+
+edges_connected = edges_connected_test %>% 
+  filter(component == 1)
+
+edges_disconnect = edges_connected_test %>% 
+  filter(component != 1)
+
+disconnect_sf = edges_disconnect %>% 
+  rowwise() %>%
+  mutate(geometry = st_sfc(
+    st_linestring(
+      matrix(c(from_lon, from_lat, to_lon, to_lat), nrow = 2, byrow = TRUE)
+    )
+  )) %>%
+  ungroup() %>%
+  st_as_sf(crs = 4326)
+
+st_write(disconnect_sf, paste0(project_dir, "edges_disconnected.shp"))
+
+### Make sure bidirectional
+#### Make an inverse version
+reverse_edges <- edges_connected %>%
+  rename(
+    from_id = to_id,
+    to_id = from_id,
+    from_lon = to_lon,
+    to_lon = from_lon,
+    from_lat = to_lat,
+    to_lat = from_lat
+  )
+
+#### Combine
+edges_bidirectional <- bind_rows(edges_connected, reverse_edges) %>%
+  distinct(from_id, to_id, .keep_all = TRUE)
+  
 ```
 
 # Network Analysis
@@ -178,20 +218,49 @@ Now that the graph is prepped, I can go into actually computing the distances be
 # Define origins
 ## Put in order of correspondence table so that I have two ordered matrices of coords for pairwise distance matrix
 origin_coords = blocks_apizza %>% 
-  left_join(census_blocks, by = "GEOID20") %>% 
-  st_as_sf() %>% 
-  st_coordinates()
+  left_join(st_drop_geometry(census_blocks) %>% 
+              bind_cols(st_coordinates(census_blocks)),
+            by = "GEOID20") %>% 
+  select(X, Y) %>% 
+  as.matrix()
+## Make colnames x and y instead of X and Y so dodgr doesn't get pissy
+colnames(origin_coords) = c("x", "y")
 
 # Define destinations
 ## Put in order of correspondence table so that I have two ordered matrices of coords for pairwise distance matrix
 dest_coords = blocks_apizza %>% 
-  left_join(apizza, by = "pizza_id") %>% 
-  st_as_sf() %>% 
-  st_coordinates()
+  left_join(st_drop_geometry(apizza) %>% 
+              bind_cols(st_coordinates(apizza)),
+            by = "pizza_id") %>% 
+  select(X, Y) %>% 
+  as.matrix()
+## Make colnames x and y instead of X and Y so dodgr doesn't get pissy
+colnames(dest_coords) = c("x", "y")
+
+# Verify CRS
+st_crs(origin_coords)
+st_crs(dest_coords)
+st_crs(roads)
+st_crs(net)
+
+# Verify bounding box
+st_bbox(apizza)
+st_bbox(roads)
+st_bbox(census_blocks)
+
+# Test run, first and last row of edges
+test_from <- matrix(c(edges_bidirectional$from_lon[1], edges$from_lat[1]), nrow = 1)
+colnames(test_from) = c("x", "y")
+test_to <- matrix(c(edges_bidirectional$to_lon[100], edges$to_lat[100]), nrow = 1)
+colnames(test_to) = c("x", "y")
+## to is 41.420705, -72.491574, near gilette castle
+## from is 41.341021, -73.082404, ansonia
+## Test the distances
+dodgr_distances(edges_bidirectional, from = test_from, to = test_to)
 
 # Run network analysis matrix
 dist_matrix = dodgr_distances(
-  edges, 
+  edges_bidirectional, 
   from = origin_coords,
   to = dest_coords,
   ## Running pairwise to only test combinations in correspondence table
@@ -206,7 +275,28 @@ Now that the actual network analysis is out of the way, I need to find the final
 
 ```{r final pairs}
 
+# Join matrix to correspondence table
+pairs = blocks_apizza %>% 
+  mutate(travel_time_sec = dist_matrix) %>% 
+  mutate(travel_time_min = travel_time_sec/60)
 
+# Check some pairs
+head(pairs, n = 25)
+##1:
+##2:
+##3:
+##4:
+##5:
+
+
+# Group to find final pairs
+pairs = pairs %>% 
+  group_by(GEOID20) %>% 
+  slice_min(travel_time, n = 1) %>% 
+  ungroup
+
+# Check final output
+slice_sample(pairs, n = 10)
 
 ```
 
