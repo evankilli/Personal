@@ -20,12 +20,20 @@ First, going to do some set up, including:
 rm(list = ls())
 
 ## Packages
+library(DBI)
+library(sf)
+library(duckdb)
 library(dplyr)
 library(tidyr)
-library(sf)
 library(sfnetworks)
 library(dodgr)
 library(stringr)
+library(overtureR)
+library(mapview)
+library(purrr)
+library(lwgeom)
+library(leaflet)
+library(clipr)
 
 ## Directories
 project_dir = paste0(getwd(), "/")
@@ -34,8 +42,443 @@ output_dir = paste0(getwd(), "/Outputs/")
 
 ## Data
 
-Now, I need to read in data. At first, I'll only test the Apizza joints (less combinations), but I'll read everything in for good measure:
-- Road Network
+Initially, I planned on using some state GIS portal roadway data with functional classes, but it turned out to be poorly suited for a routing topology. After investigating some sources with some AI help from Claude based on the specifications I gave, I've decided to pull roadway data from Overture since it's free and purpose-built for routing (at least in comparison to other free sources). Querying and initial prep is included below.
+
+```{r get overture data}
+# DB setup
+con <- dbConnect(duckdb())
+dbExecute(con, "INSTALL httpfs; LOAD httpfs;")
+dbExecute(con, "INSTALL spatial; LOAD spatial;")
+
+# Specify release
+release <- "2026-09-23.1"  # or fetch dynamically — see note below
+
+# Define bounding box around CT
+bbox <- c(xmin = -73.75, ymin = 40.95, xmax = -71.75, ymax = 42.06)
+
+# Define base path for pulling from overture
+base_path <- sprintf("s3://overturemaps-us-west-2/release/%s/theme=transportation", release)
+
+# Define classes to exclude
+excluded_classes <- "'service', 'footway', 'path', 'steps', 'cycleway', 'pedestrian', 'bridleway', 'track'"
+ 
+
+# Segments
+## Query
+segments_query <- sprintf("
+  SELECT
+    id,
+    subtype,
+    class,
+    names,
+    connectors,
+    speed_limits,
+    road_surface,
+    access_restrictions,
+    ST_AsText(geometry) AS geom_wkt
+  FROM read_parquet(
+    '%s/type=segment/*.parquet',
+    hive_partitioning = 1
+  )
+  WHERE bbox.xmin < %f AND bbox.xmax > %f
+    AND bbox.ymin < %f AND bbox.ymax > %f
+    AND subtype = 'road'
+    AND class NOT IN (%s)
+", base_path, bbox['xmax'], bbox['xmin'], bbox['ymax'], bbox['ymin'], excluded_classes)
+ 
+## Run query
+segments_df <- dbGetQuery(con, segments_query)
+segments_sf <- st_as_sf(segments_df, wkt = "geom_wkt", crs = 4326)
+ 
+cat(sprintf("Pulled %d road segments (service + non-vehicular classes excluded)\n", nrow(segments_sf)))
+ 
+# Connectors
+## Query
+connectors_query <- sprintf("
+  SELECT
+    id,
+    ST_AsText(geometry) AS geom_wkt
+  FROM read_parquet(
+    '%s/type=connector/*.parquet',
+    hive_partitioning = 1
+  )
+  WHERE bbox.xmin < %f AND bbox.xmax > %f
+    AND bbox.ymin < %f AND bbox.ymax > %f
+", base_path, bbox['xmax'], bbox['xmin'], bbox['ymax'], bbox['ymin'])
+ 
+## Run query
+connectors_df <- dbGetQuery(con, connectors_query)
+connectors_sf <- st_as_sf(connectors_df, wkt = "geom_wkt", crs = 4326)
+ 
+cat(sprintf("Pulled %d connectors\n", nrow(connectors_sf)))
+
+# Close connection
+dbDisconnect(con, shutdown = TRUE)
+
+# Flatten
+segments_flat <- segments_sf |>
+  mutate(
+    primary_name = names$primary,
+    connector_ids = map_chr(connectors, \(x) {
+      if (is.null(x) || nrow(x) == 0) return(NA_character_)
+      paste(x$connector_id, collapse = ";")
+    }),
+    connector_positions = map_chr(connectors, \(x) {
+      if (is.null(x) || nrow(x) == 0) return(NA_character_)
+      paste(x$at, collapse = ";")
+    }),
+    n_midpoint_connectors = map_int(connectors, \(x) {
+      if (is.null(x) || nrow(x) == 0) return(0L)
+      sum(x$at > 0 & x$at < 1)
+    }),
+    speed_limit_mph = map_dbl(speed_limits, \(x) {
+      if (is.null(x) || length(x) == 0) return(NA_real_)
+      val <- tryCatch(x[[1]]$max_speed$value, error = \(e) NA_real_)
+      if (is.null(val)) NA_real_ else as.numeric(val)
+    })
+  ) |>
+  select(-names, -connectors, -speed_limits, -access_restrictions)
+
+## Flatten connectors and remove unused connectors
+kept_connector_touches <- segments_flat |>
+  st_drop_geometry() |>
+  select(id, connector_ids) |>
+  separate_longer_delim(connector_ids, delim = ";")
+ 
+kept_connector_degree <- kept_connector_touches |>
+  count(connector_ids, name = "kept_degree")
+ 
+real_junction_ids <- kept_connector_degree |>
+  filter(kept_degree >= 2) |>
+  pull(connector_ids)
+ 
+connectors_flat <- connectors_sf |>
+  filter(id %in% real_junction_ids)
+ 
+cat(sprintf("Connectors: %d in bbox -> %d are real junctions (2+ kept segments)\n",
+            nrow(connectors_sf), nrow(connectors_flat)))
+
+segments_flat <- segments_flat |>
+  mutate(
+    n_real_midpoint_connectors = map2_int(connector_ids, connector_positions, \(ids, positions) {
+      if (is.na(ids) || is.na(positions)) return(0L)
+      id_vec <- strsplit(ids, ";")[[1]]
+      at_vec <- as.numeric(strsplit(positions, ";")[[1]])
+      sum(id_vec %in% real_junction_ids & at_vec > 0 & at_vec < 1)
+    })
+  )
+ 
+cat(sprintf("Segments needing splitting (real junctions only): %d of %d\n",
+            sum(segments_flat$n_real_midpoint_connectors > 0),
+            nrow(segments_flat)))
+
+# # Write locally
+# st_write(segments_flat, "overture_ct_segments.gpkg", delete_dsn = TRUE)
+# st_write(connectors_flat_filtered, "overture_ct_connectors.gpkg", delete_dsn = TRUE)
+
+## QAQC
+# ---- 1. Manchester, CT bounding box --------------------------------------
+manchester_bbox <- st_bbox(
+  c(xmin = -72.587185, ymin = 41.752105, xmax = -72.456207, ymax = 41.831456),
+  crs = st_crs(4326)
+) |> st_as_sfc()
+
+# ---- 2. Filter segments and connectors to the bbox -----------------------
+manchester_segments <- segments_flat[st_intersects(segments_flat, manchester_bbox, sparse = FALSE), ]
+manchester_connectors <- connectors_flat[st_intersects(connectors_flat, manchester_bbox, sparse = FALSE), ]
+ 
+cat(sprintf("Manchester subset: %d segments, %d connectors\n",
+            nrow(manchester_segments), nrow(manchester_connectors)))
+cat(sprintf("  segments with mid-segment connectors: %d\n",
+            sum(manchester_segments$n_midpoint_connectors > 0, na.rm = TRUE)))
+ 
+# ---- 3. Flag segments with mid-segment connectors for visual QA ----------
+manchester_segments <- manchester_segments |>
+  mutate(has_midpoint_connector = n_real_midpoint_connectors > 0)
+ 
+# ---- 4. Plot: roads (flagged) + connectors ---------------------------------
+manchester_map = mapview(
+  manchester_segments,
+  zcol = "has_midpoint_connector",
+  color = list("grey40", "red"),
+  lwd = 2,
+  layer.name = "Roads (red = has mid-segment connector)"
+) +
+mapview(
+  manchester_connectors,
+  color = "blue",
+  col.regions = "blue",
+  cex = 3,
+  layer.name = "Connectors"
+)
+
+## Additional checks
+cat(sprintf("Empty geometries: %d\n", sum(st_is_empty(segments_flat$geom_wkt))))
+cat(sprintf("Invalid geometries: %d\n", sum(!st_is_valid(segments_flat$geom_wkt[!st_is_empty(segments_flat$geom_wkt)])))) #no empty/invalid
+
+segments_flat |>
+  mutate(n_pts = mapply(function(g) nrow(st_coordinates(g)), geom_wkt)) |>
+  filter(n_pts < 2) |>
+  nrow() # 0
+
+segments_flat |>
+  st_drop_geometry() |>
+  filter(n_real_midpoint_connectors > 0) |>
+  mutate(
+    at_vals = strsplit(connector_positions, ";") |> map(as.numeric),
+    min_gap = map_dbl(at_vals, \(x) {
+      xs <- sort(unique(x))
+      if (length(xs) < 2) return(NA_real_)
+      min(diff(xs))
+    })
+  ) |>
+  filter(min_gap < 0.0001) |>
+  nrow() # 0
+
+segments_flat |>
+  st_drop_geometry() |>
+  filter(n_real_midpoint_connectors > 0) |>
+  mutate(
+    n_ids = lengths(strsplit(connector_ids, ";")),
+    n_pos = lengths(strsplit(connector_positions, ";"))
+  ) |>
+  filter(n_ids != n_pos) |>
+  nrow() # 0
+
+segments_flat |>
+  st_drop_geometry() |>
+  filter(n_real_midpoint_connectors > 0) |>
+  mutate(at_vals = strsplit(connector_positions, ";") |> map(as.numeric)) |>
+  filter(map_lgl(at_vals, \(x) !(0 %in% x) || !(1 %in% x))) |>
+  nrow() # 0
+
+
+```
+
+Now that I have my roadways (segments and connectors) pulled from Overture, I'll need to split roadways; unfortunately, much of this dataset (like many roadway datasets) have connectors in the middle of unsplit segments, providing no way to transfer between them in a routing topology. Splitting on these connectors will provide a cleaner web with all available connections.
+
+```{r prep roads}
+
+# Split segments with midpoint connectors
+# ## Filter to Manchester to test before doing for whole state
+# segments_flat = segments_flat[st_intersects(segments_flat, manchester_bbox, sparse = FALSE), ]
+# connectors_flat = connectors_flat[st_intersects(connectors_flat, manchester_bbox, sparse = FALSE), ]
+
+## Determine which need to be split vs dont
+segments_to_split <- segments_flat |>
+  filter(n_real_midpoint_connectors > 0)
+
+segments_to_split |> st_geometry() |> st_geometry_type() |> table()
+
+segments_to_split |>
+  mutate(n_parts = lengths(st_geometry(segments_to_split))) |>
+  st_drop_geometry() |>
+  count(n_parts)
+ 
+segments_unchanged <- segments_flat |>
+  filter(n_real_midpoint_connectors == 0)
+ 
+cat(sprintf("Splitting %d segments, %d segments unchanged\n",
+            nrow(segments_to_split), nrow(segments_unchanged)))
+ 
+# ---- 2. Function to split a single segment's geometry at given break points -
+split_one_segment <- function(geom, connector_ids_str, connector_positions_str) {
+  id_vec <- strsplit(connector_ids_str, ";")[[1]]
+  at_vec <- as.numeric(strsplit(connector_positions_str, ";")[[1]])
+
+  split_at <- sort(unique(at_vec[id_vec %in% real_junction_ids & at_vec > 0 & at_vec < 1]))
+
+  breaks <- c(0, split_at, 1)
+  pieces <- vector("list", length(breaks) - 1)
+
+  geom_sfc <- st_sfc(geom, crs = st_crs(segments_to_split))  # <- force to sfc
+
+  for (i in seq_len(length(breaks) - 1)) {
+    pieces[[i]] <- lwgeom::st_linesubstring(geom_sfc, breaks[i], breaks[i + 1])
+  }
+
+  piece_connectors <- vector("list", length(breaks) - 1)
+  for (i in seq_len(length(breaks) - 1)) {
+    start_id <- if (breaks[i] == 0) id_vec[at_vec == 0][1] else id_vec[at_vec == breaks[i]][1]
+    end_id   <- if (breaks[i + 1] == 1) id_vec[at_vec == 1][1] else id_vec[at_vec == breaks[i + 1]][1]
+    piece_connectors[[i]] <- paste(start_id, end_id, sep = ";")
+  }
+
+  list(geoms = pieces, connectors = piece_connectors)
+}
+ 
+## Apply the split itself
+system.time({
+  split_results <- segments_to_split |>
+  st_drop_geometry() |>
+  select(id, connector_ids, connector_positions) |>
+  bind_cols(geometry = st_geometry(segments_to_split)) |>
+  pmap(function(id, connector_ids, connector_positions, geometry) {
+    split_one_segment(geometry, connector_ids, connector_positions)
+  })
+})
+
+ 
+## Reebuild into SF again
+split_segments_long <- map2_dfr(segments_to_split$id, split_results, \(seg_id, res) {
+  n_pieces <- length(res$geoms)
+  tibble(
+    original_id = seg_id,
+    piece_num = seq_len(n_pieces),
+    new_connector_ids = unlist(res$connectors),  # this one is fine — plain character strings, not geometries
+    geometry = st_sfc(do.call(c, res$geoms), crs = st_crs(segments_flat))
+  )
+}) |>
+  st_as_sf()
+ 
+## Join attributes back
+segments_split_final <- split_segments_long |>
+  left_join(
+    segments_to_split |> st_drop_geometry() |>
+      select(-connector_ids, -connector_positions, -n_real_midpoint_connectors) |>
+      rename(original_id = id),
+    by = "original_id"
+  ) |>
+  mutate(
+    id = paste0(original_id, "_", piece_num),
+    connector_ids = new_connector_ids,
+    connector_positions = "0;1",
+    n_real_midpoint_connectors = 0L  # by construction, no piece has a midpoint junction anymore
+  ) |>
+  select(-piece_num, -new_connector_ids)
+ 
+segments_split_final <- segments_split_final |>
+  rename(geom_wkt = geometry) |>
+  st_set_geometry("geom_wkt")
+
+stopifnot(attr(segments_unchanged, "sf_column") == attr(segments_split_final, "sf_column"))
+
+## Clean up unchanged segment connector ids/positions
+segments_unchanged_clean <- segments_unchanged |>
+  mutate(
+    kept_pairs = map2(connector_ids, connector_positions, \(ids, positions) {
+      id_vec <- strsplit(ids, ";")[[1]]
+      at_vec <- as.numeric(strsplit(positions, ";")[[1]])
+      keep <- at_vec == 0 | at_vec == 1 | id_vec %in% real_junction_ids
+      list(ids = id_vec[keep], at = at_vec[keep])
+    }),
+    connector_ids = map_chr(kept_pairs, \(x) paste(x$ids, collapse = ";")),
+    connector_positions = map_chr(kept_pairs, \(x) paste(x$at, collapse = ";"))
+  ) |>
+  select(-kept_pairs)
+
+### Average number of connectors per segment, before vs after
+mean(lengths(strsplit(segments_unchanged$connector_ids, ";")))
+mean(lengths(strsplit(segments_unchanged_clean$connector_ids, ";")))
+
+### Other check
+segments_unchanged_clean |> filter(connector_ids == "" | is.na(connector_ids)) |> nrow()
+
+## Combine segments that didn't need to be split and split pieces back together
+segments_final <- bind_rows(
+  segments_unchanged_clean |> mutate(original_id = id),
+  segments_split_final
+)
+ 
+cat(sprintf("Final segment count: %d (was %d before splitting)\n",
+            nrow(segments_final), nrow(segments_flat)))
+ 
+# Make final connectors so less missing
+all_referenced_connector_ids <- segments_final |>
+  st_drop_geometry() |>
+  pull(connector_ids) |>
+  strsplit(";") |>
+  unlist() |>
+  unique()
+
+connectors_final <- connectors_sf |>
+  filter(id %in% all_referenced_connector_ids)
+
+cat(sprintf("Connectors: %d referenced by segments_final -> %d found in raw pull\n",
+            length(all_referenced_connector_ids), nrow(connectors_final)))
+
+# ---- 4. Plot: roads (flagged) + connectors ---------------------------------
+checkbbox = st_bbox(
+  c(xmin = -72.587185, ymin = 41.752105, xmax = -72.456207, ymax = 41.831456),
+  crs = st_crs(4326)
+) |> st_as_sfc()
+segmentcheck = segments_final[st_intersects(segments_final, checkbbox, sparse = FALSE), ]
+connectorcheck = connectors_final[st_intersects(connectors_final, checkbbox, sparse = FALSE), ]
+  
+  
+segment_map_check = mapview(
+  segmentcheck,
+  color = "grey40",
+  lwd = 2,
+  layer.name = "Roads (red = has mid-segment connector)"
+) +
+mapview(
+  connectorcheck,
+  color = "blue",
+  col.regions = "blue",
+  cex = 3,
+  layer.name = "Connectors"
+)
+```
+
+ Finally, I'll be adding speed limits to roads so that routing will be at least somewhat closer to real world conditions. Decisions will be based on road class, taking definitions from OpenStreetMap documentation (one of the sources used in producing Overture), available here https://wiki.openstreetmap.org/wiki/United_States/Road_classification. I've also individually looked at the roadways included in each class by plotting them on a map so I can use a combination of CT speed limit guidelines and personal experience as a CT driver to determine speed limits to apply to each class. Decisions are as follows:
+
+| Class | Description | Example(s) | Speed (mph) assigned |
+| Motorway | Interstates, freeways, and other divided highways | I-95 | 60 |
+| Trunk | Local, often rural highways | US-6 | 45 |
+| Primary | State and local routes, major non-highway roads | Middle/Boston Turnpike in Manchester and Bolton | 35 |
+| Secondary | Major local roads | Tolland Stage Rd in Tolland | 35 |
+| Tertiary | Not quite major, not quite residential | Spruce St and Spring St in Manchester | 25 |
+| Residential | Roads lined with residences not intended for significant through-traffic | EWestminster Rd in Manchester | 20 |
+| Living Street | Few cases, roadways within complexes | N/A | 10 |
+| Unclassified | Mostly roadways on campuses and military bases | N/A | 10 |
+| Unknown | Mostly driveways, dead ends, etc | N/A | 10 |
+
+```{r speed limits}
+# Evaluate roadway segment types on which speed limits will be based
+str(segments_final)
+segments_final %>% group_by(class) %>% summarise(n = n())
+segments_final %>% group_by(speed_limit_mph) %>% summarise(n = n())
+
+# Add speed limits
+## based on https://wiki.openstreetmap.org/wiki/United_States/Road_classification
+### code to check road class
+segment_map_check = mapview(
+    segments_final %>% filter(class == "residential"),
+    color = "grey40",
+    lwd = 2,
+    layer.name = "Roads (red = has mid-segment connector)"
+)
+segment_map_check
+
+### assignment
+segments_final = segments_final %>% 
+  mutate(speed_limit_mph = case_when(
+    class == "motorway" ~ 60,
+    class == "trunk" ~ 45,
+    class == "primary" ~ 35,
+    class == "secondary" ~ 35,
+    class == "tertiary" ~ 25,
+    class == "residential" ~ 20,
+    class == "unclassified" ~ 10, # mostly campuses and bases, leave low to discourage use
+    class == "living_street" ~ 10, # mostly campuses and within complexes, leave low to discourage use
+    class == "unknown" ~ 10 # mostly driveways, within complexes, etc., leave low to discourage use
+  ))
+
+### check
+segments_final %>% group_by(speed_limit_mph) %>% summarise(n = n())
+
+# Remove list column
+segments_final = segments_final %>% 
+  select(-c(road_surface))
+
+# Write out shapes just in case needed
+write_sf(segments_final, file.path('Overture Roads Outputs','Overture Segments.gpkg'), 'segments')
+write_sf(connectors_final, file.path('Overture Roads Outputs','Overture Connectors.gpkg'), 'connectors')
+```
+
+Now, I need to read in other data. At first, I'll only test the Apizza joints (less combinations), but I'll read everything in for good measure:
+- Road Network --> changing tacks, as described above
 - Census blocks
 - Table of block-apizza restaurant correspondences
 - All pizza joints (not right now)
@@ -44,13 +487,12 @@ Now, I need to read in data. At first, I'll only test the Apizza joints (less co
 - Neapolitan pizza joints (not right now)
 - Tavern pizza joints (not right now)
 - Thick pizza joints (not right now)
-- 
-
 
 ```{r read data}
 
 ## Read in road network
-roads = st_read(paste0(project_dir, "CT Roads with Speed Limits Exploded.gpkg"))
+segments = st_read(file.path('Overture Roads Outputs', 'Overture Segments.gpkg'))
+connectors = st_read(file.path('Overture Roads Outputs', 'Overture Connectors.gpkg'))
 
 ## Read in Pizza joints
 # all_pizza = st_read(paste0(project_dir, "Pizza Spots Fixed Locations.gpkg"))
@@ -62,6 +504,7 @@ apizza = st_read(paste0(project_dir, "Apizza Pizza Shops.gpkg"))
 
 ## Read in census blocks
 census_blocks = st_read(paste0(project_dir, "Clean Census Blocks.gpkg"))
+census_block_shape = st_read(paste0(project_dir, "Clean Census Blocks.gpkg"))
 
 ## Read in correspondence table
 blocks_apizza = read.csv(paste0(project_dir, "Blocks with Apizza Joints.csv"), header = TRUE, check.names=FALSE)
@@ -123,89 +566,296 @@ Here comes the fun part! Now that I've got all my files loaded in, I'll use dodg
 
 ```{r network}
 
-# Road network
-## CRS
-roads = roads %>% 
-  st_transform(4326)
-
-## Find length
-roads = roads %>% 
-  ### Needs to be in projected CRS for length to work
-  mutate(d = as.numeric(st_length(st_transform(., 6433)))) %>% 
-  ### Transform back
-  st_transform(4326) %>% 
-  mutate(d_weighted = d/(speed*0.44704))
-
-## Roads to network, then to edges and nodes
-### Network
-net = as_sfnetwork(roads, directed = FALSE)
-
-### Edges
-edges = net %>% 
-  activate("edges") %>% 
-  st_as_sf() %>% 
+# Work on edges/segments
+edges_df = segments %>% 
   mutate(
-    from_id = as.character(from),
-    to_id = as.character(to)
+    ## Add columns splitting the connector id column into start and end
+    from_id = map_chr(connector_ids, \(x) strsplit(x, ";")[[1]][1]),
+    to_id   = map_chr(connector_ids, \(x) {
+      ids <- strsplit(x, ";")[[1]]
+      ids[length(ids)]
+    })
   ) %>% 
-  st_drop_geometry() %>% 
-  select(from_id, to_id, d, d_weighted)
-  
-### Nodes
-nodes = net %>% 
-  activate("nodes") %>% 
-  st_as_sf() %>% 
-  mutate(node_id = as.character(row_number())) %>% 
-  bind_cols(st_coordinates(.)) %>%
-  st_drop_geometry() %>% 
-  select(node_id, X, Y) %>% 
-  rename(lon = X, lat = Y)
-  
-### Add node coords to edges table 
-edges = edges %>% 
-  left_join(nodes, by = c("from_id" = "node_id")) %>% 
-  rename(from_lon = lon, from_lat = lat) %>% 
-  left_join(nodes, by = c("to_id" = "node_id")) %>% 
-  rename(to_lon = lon, to_lat = lat) %>% 
-  mutate(edge_id = row_number()) %>% 
+  ## rename to from and to for sfnetwork to work
+  rename(from = from_id) %>% 
+  rename(to = to_id)
+
+# Work on nodes/connectors
+nodes_df = connectors %>% 
+  rename(node_id = id)
+
+# Check before running
+setdiff(c(edges_df$from, edges_df$to), nodes_df$node_id) |> unique() |> length()
+missing_ids <- setdiff(c(edges_df$from, edges_df$to), nodes_df$node_id) |> unique()
+# Are these NA, empty strings, or genuine-looking UUIDs?
+head(missing_ids, 20)
+sum(is.na(missing_ids))
+sum(missing_ids == "")
+## Plot for check
+### Identify segments referencing a missing connector ID 
+segments_missing_connectors <- segments_final |>
+  filter(map_lgl(strsplit(connector_ids, ";"), \(ids) any(ids %in% missing_ids)))
+cat(sprintf("Segments referencing a missing connector: %d\n",
+            nrow(segments_missing_connectors)))
+### Plot these segments against the full network for context
+# mapview(
+#   segments_final,
+#   color = "grey70",
+#   lwd = 1,
+#   layer.name = "All segments"
+# ) +
+check3 = mapview(
+  segments_missing_connectors,
+  color = "red",
+  lwd = 3,
+  layer.name = "Segments with missing connector reference"
+)
+### Looks like it's all at the borders of the bbox
+## Clean out edges
+edges_df_clean = edges_df %>% 
+  filter(!(from %in% missing_ids | to %in% missing_ids))
+cat(sprintf("Edges: %d -> %d after dropping bbox-boundary artifacts (%d removed)\n",
+            nrow(edges_df), nrow(edges_df_clean), nrow(edges_df) - nrow(edges_df_clean)))
+
+
+# Prepare dodgr graph
+## Get edges data set up correctly
+edges_for_dodgr = edges_df_clean %>% 
+  rename(from_id = from, to_id = to)
+
+## Compute edge lengths and time to travel 
+edges_for_dodgr <- edges_for_dodgr |>
+  mutate(d = as.numeric(st_length(st_transform(edges_for_dodgr, 6433)))) |>
+  st_transform(4326) |>
+  mutate(d_weighted = d / (speed_limit_mph * 0.44704) / 60)
+### Check
+checkbbox = st_bbox(
+  c(xmin = -72.587185, ymin = 41.752105, xmax = -72.456207, ymax = 41.831456),
+  crs = st_crs(4326)
+) |> st_as_sfc()
+dodgredgescheck = edges_for_dodgr[st_intersects(edges_for_dodgr, checkbbox, sparse = FALSE), ]
+dodgredgescheckmap = mapview(
+  dodgredgescheck,
+  color = "grey40",
+  lwd = 2,
+  layer.name = "Roads (red = has mid-segment connector)"
+) 
+
+## Build coord lookup from nodes so I can join coords onto dodgr edges graph
+nodes_coords <- nodes_df |>
+  st_transform(4326) |>
+  mutate(lon = st_coordinates(geom)[, 1],
+         lat = st_coordinates(geom)[, 2]) |>
+  st_drop_geometry() |>
+  select(node_id, lon, lat)
+
+## Join coords onto edges graph
+edges_for_dodgr <- edges_for_dodgr |>
+  st_drop_geometry() |>
+  left_join(nodes_coords, by = c("from_id" = "node_id")) |>
+  rename(from_lon = lon, from_lat = lat) |>
+  left_join(nodes_coords, by = c("to_id" = "node_id")) |>
+  rename(to_lon = lon, to_lat = lat) |>
+  mutate(edge_id = row_number()) |>
   relocate(edge_id, .before = from_id)
 
-### Filter out unconnected edges
-edges_connected_test = dodgr_components(edges) 
+## Check connectivity
+### Define as result of dodgr components check
+edges_connected_test <- dodgr_components(edges_for_dodgr)
+### Divide into connected and disconnected
+edges_connected <- edges_connected_test |> filter(component == 1)
+edges_disconnect <- edges_connected_test |> filter(component != 1)
+cat(sprintf("Edges: %d total -> %d in main component, %d disconnected\n",
+            nrow(edges_connected_test), nrow(edges_connected), nrow(edges_disconnect)))
+### Plot disconnected
+#### Join geometries back onto disconnected edges
+disconnect_sf <- edges_disconnect |>
+  left_join(
+    segments_final |> select(id, geom_wkt),
+    by = "id"
+  ) |>
+  st_as_sf()
+#### Confirm the join worked and geometry is real
+nrow(disconnect_sf)
+sum(st_is_empty(st_geometry(disconnect_sf)))  # should be 0
+#### Plot
+disconnect_check = mapview(disconnect_sf, color = "red", lwd = 2, layer.name = "Disconnected edges")
+##### Random paths off the road network (unclassified roads within parking lots, for example) plus Long Island, good to remove
 
-edges_connected = edges_connected_test %>% 
-  filter(component == 1)
-
-edges_disconnect = edges_connected_test %>% 
-  filter(component != 1)
-
-disconnect_sf = edges_disconnect %>% 
-  rowwise() %>%
-  mutate(geometry = st_sfc(
-    st_linestring(
-      matrix(c(from_lon, from_lat, to_lon, to_lat), nrow = 2, byrow = TRUE)
-    )
-  )) %>%
-  ungroup() %>%
-  st_as_sf(crs = 4326)
-
-st_write(disconnect_sf, paste0(project_dir, "edges_disconnected.shp"))
-
-### Make sure bidirectional
-#### Make an inverse version
-reverse_edges <- edges_connected %>%
+## Discard disconnected edges and make edges graph birdirectional
+### Make reversed copy
+reverse_edges <- edges_connected |>
   rename(
-    from_id = to_id,
-    to_id = from_id,
-    from_lon = to_lon,
-    to_lon = from_lon,
-    from_lat = to_lat,
-    to_lat = from_lat
+    from_id = to_id, to_id = from_id,
+    from_lon = to_lon, to_lon = from_lon,
+    from_lat = to_lat, to_lat = from_lat
   )
-
-#### Combine
-edges_bidirectional <- bind_rows(edges_connected, reverse_edges) %>%
+### Combine both directions
+edges_bidirectional <- bind_rows(edges_connected, reverse_edges) |>
   distinct(from_id, to_id, .keep_all = TRUE)
+
+## Final checks before network
+### Check how many discarded
+cat(sprintf("Keeping %d of %d edges (%.1f%% of network)\n",
+            nrow(edges_connected), nrow(edges_connected_test),
+            100 * nrow(edges_connected) / nrow(edges_connected_test)))
+### Map largest groups
+top_disconnected <- edges_connected_test |>
+  filter(component %in% c(2, 3, 4, 5, 6, 7)) |>
+  left_join(segments_final |> select(id, geom_wkt), by = "id") |>
+  st_as_sf()
+topdisconnectedmap = mapview(top_disconnected, zcol = "component", lwd = 3)
+#### All long island
+### Map all disconnected edges
+li_check <- edges_disconnect |>
+  left_join(segments_final |> select(id, geom_wkt), by = "id") |>
+  st_as_sf()
+licheckmap = mapview(li_check, zcol = "component", lwd = 2)
+#### all good
+
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# # Build network using connector IDs
+# net <- sfnetwork(
+#   nodes = nodes_df,
+#   edges = edges_df_clean,
+#   node_key = "node_id",   # column in nodes_df that from/to reference
+#   edges_as_lines = TRUE,
+#   directed = FALSE
+# )
+# 
+# ## QAQC
+# nrow(activate(net, "nodes"))
+# nrow(connectors)
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# # Road network
+# ## CRS --> updated roads already in WGS 84
+# # roads = segments_final %>% 
+# #   st_transform(4326)
+# 
+# ## Find length
+# roads = segments_final %>% 
+#   ### Needs to be in projected CRS for length to work
+#   mutate(d = as.numeric(st_length(st_transform(., 6433)))) %>% 
+#   ### Transform back
+#   st_transform(4326) %>% 
+#   mutate(d_weighted = d/(speed_limit_mph*0.44704))
+# 
+# ################################################################################
+# # Check segments, make sure times and distances make sense
+# checkbbox2 <- st_bbox(
+#   c(xmin = -72.625, ymin = 41.75, xmax = -72.375, ymax = 41.875),
+#   crs = st_crs(4326)
+# ) |> st_as_sfc()
+# roadscheck = roads[st_intersects(roads, checkbbox2, sparse = FALSE), ]
+# connectorcheck2 = connectors_flat[st_intersects(connectors_flat, checkbbox2, sparse = FALSE), ]
+#   
+#   
+# roadscheckmap = mapview(
+#   roadscheck,
+#   color = "grey40",
+#   lwd = 2,
+#   layer.name = "Roads (red = has mid-segment connector)"
+# ) +
+# mapview(
+#   connectorcheck2,
+#   color = "blue",
+#   col.regions = "blue",
+#   cex = 3,
+#   layer.name = "Connectors"
+# )
+# 
+# ################################################################################
+# 
+# ## Roads to network, then to edges and nodes
+# ### Network
+# net = as_sfnetwork(roads, directed = FALSE)
+# 
+# ### Edges
+# edges = net %>% 
+#   activate("edges") %>% 
+#   st_as_sf() %>% 
+#   mutate(
+#     from_id = as.character(from),
+#     to_id = as.character(to)
+#   ) %>% 
+#   st_drop_geometry() %>% 
+#   select(from_id, to_id, d, d_weighted)
+#   
+# ### Nodes
+# nodes = net %>% 
+#   activate("nodes") %>% 
+#   st_as_sf() %>% 
+#   mutate(node_id = as.character(row_number())) %>% 
+#   bind_cols(st_coordinates(.)) %>%
+#   st_drop_geometry() %>% 
+#   select(node_id, X, Y) %>% 
+#   rename(lon = X, lat = Y)
+#   
+# ### Add node coords to edges table 
+# edges = edges %>% 
+#   left_join(nodes, by = c("from_id" = "node_id")) %>% 
+#   rename(from_lon = lon, from_lat = lat) %>% 
+#   left_join(nodes, by = c("to_id" = "node_id")) %>% 
+#   rename(to_lon = lon, to_lat = lat) %>% 
+#   mutate(edge_id = row_number()) %>% 
+#   relocate(edge_id, .before = from_id)
+# 
+# ### Filter out unconnected edges
+# edges_connected_test = dodgr_components(edges) 
+# 
+# edges_connected = edges_connected_test %>% 
+#   filter(component == 1)
+# 
+# edges_disconnect = edges_connected_test %>% 
+#   filter(component != 1)
+# 
+# disconnect_sf = edges_disconnect %>% 
+#   rowwise() %>%
+#   mutate(geometry = st_sfc(
+#     st_linestring(
+#       matrix(c(from_lon, from_lat, to_lon, to_lat), nrow = 2, byrow = TRUE)
+#     )
+#   )) %>%
+#   ungroup() %>%
+#   st_as_sf(crs = 4326)
+# 
+# st_write(disconnect_sf, paste0(project_dir, "edges_disconnected.shp"))
+# 
+# ### Make sure bidirectional
+# #### Make an inverse version
+# reverse_edges <- edges_connected %>%
+#   rename(
+#     from_id = to_id,
+#     to_id = from_id,
+#     from_lon = to_lon,
+#     to_lon = from_lon,
+#     from_lat = to_lat,
+#     to_lat = from_lat
+#   )
+# 
+# #### Combine
+# edges_bidirectional <- bind_rows(edges_connected, reverse_edges) %>%
+#   distinct(from_id, to_id, .keep_all = TRUE)
   
 ```
 
@@ -213,60 +863,102 @@ edges_bidirectional <- bind_rows(edges_connected, reverse_edges) %>%
 
 Now that the graph is prepped, I can go into actually computing the distances between places from the table!
 
+After putting together a test run of 1000 randomly sampled rows, I wrote out the resulting table with its coordinates to check out the real drive times per online mapping tools. After obtaining the travel times for each of the coordinate pairs via Google Maps (using the guidance provided [here](https://medium.com/@omniview/using-google-apps-scripts-to-calculate-realtime-driving-distance-time-33e58cdd54d7)), I calculated a correction for each row (Google Maps trip time divided by network analysis trip time), broke the network analysis trip times into quintiles, found the boundaries of those quintiles, and calculated an average correction for each group so that I could calculate more realistic travel times for each pair without resorting to nearly 300,000 individual routing requests.
+
 ```{r network analysis}
 
-# Define origins
-## Put in order of correspondence table so that I have two ordered matrices of coords for pairwise distance matrix
-origin_coords = blocks_apizza %>% 
-  left_join(st_drop_geometry(census_blocks) %>% 
-              bind_cols(st_coordinates(census_blocks)),
-            by = "GEOID20") %>% 
-  select(X, Y) %>% 
-  as.matrix()
-## Make colnames x and y instead of X and Y so dodgr doesn't get pissy
-colnames(origin_coords) = c("x", "y")
+# Prepare edges 
+edges_bidirectional = edges_bidirectional %>% 
+  rename(time_weighted = d_weighted) %>% 
+  mutate(time = time_weighted)
+## Clean up structure a bit
+edges_bidirectional = edges_bidirectional %>% 
+  select(c(edge_id, to_id, from_id, to_lat, to_lon, from_lat, from_lon, d, time_weighted, time))
 
-# Define destinations
-## Put in order of correspondence table so that I have two ordered matrices of coords for pairwise distance matrix
-dest_coords = blocks_apizza %>% 
-  left_join(st_drop_geometry(apizza) %>% 
-              bind_cols(st_coordinates(apizza)),
-            by = "pizza_id") %>% 
-  select(X, Y) %>% 
-  as.matrix()
-## Make colnames x and y instead of X and Y so dodgr doesn't get pissy
-colnames(dest_coords) = c("x", "y")
+# Guard against key problems that would silently break alignment
+stopifnot(
+  !anyDuplicated(census_blocks$GEOID20),
+  !anyDuplicated(apizza$pizza_id),
+  !anyDuplicated(blocks_apizza[c("GEOID20", "pizza_id")])
+)
+
+# Coordinate lookups, keyed (select only what you need so Name doesn't collide)
+block_xy = census_blocks %>%
+  st_drop_geometry() %>%
+  bind_cols(st_coordinates(census_blocks)) %>%
+  select(GEOID20, o_x = X, o_y = Y)
+
+pizza_xy = apizza %>%
+  st_drop_geometry() %>%
+  bind_cols(st_coordinates(apizza)) %>%
+  select(pizza_id, d_x = X, d_y = Y)
+
+# One row per block-shop pair, coordinates attached by key
+pairs = blocks_apizza %>%
+  left_join(block_xy, by = "GEOID20") %>%
+  left_join(pizza_xy, by = "pizza_id")
+
+stopifnot(nrow(pairs) == nrow(blocks_apizza),
+          !anyNA(pairs[c("o_x", "o_y", "d_x", "d_y")]))
+
+# Matrices come from the table, so row i of each belongs to row i of pairs
+origin_coords = as.matrix(pairs[c("o_x", "o_y")]); colnames(origin_coords) = c("x", "y")
+dest_coords   = as.matrix(pairs[c("d_x", "d_y")]); colnames(dest_coords)   = c("x", "y")
 
 # Verify CRS
-st_crs(origin_coords)
-st_crs(dest_coords)
-st_crs(roads)
-st_crs(net)
+st_crs(census_blocks)
+st_crs(apizza)
+st_crs(edges_df_clean)
+st_crs(edges_df_clean) == st_crs(census_blocks)
+st_crs(edges_df_clean) == st_crs(apizza)
 
 # Verify bounding box
 st_bbox(apizza)
-st_bbox(roads)
+st_bbox(edges_df_clean)
 st_bbox(census_blocks)
 
+# Verify numbers
+nrow(origin_coords) == nrow(dest_coords)  # required for pairwise = TRUE
+sum(is.na(origin_coords))  # any unmatched GEOID20 in the join?
+sum(is.na(dest_coords))    # any unmatched pizza_id?
+
 # Test run, first and last row of edges
-test_from <- matrix(c(edges_bidirectional$from_lon[1], edges$from_lat[1]), nrow = 1)
+test_from <- matrix(c(edges_bidirectional$from_lon[1], edges_bidirectional$from_lat[1]), nrow = 1)
 colnames(test_from) = c("x", "y")
-test_to <- matrix(c(edges_bidirectional$to_lon[100], edges$to_lat[100]), nrow = 1)
+test_to <- matrix(c(edges_bidirectional$to_lon[5000], edges_bidirectional$to_lat[5000]), nrow = 1)
 colnames(test_to) = c("x", "y")
-## to is 41.420705, -72.491574, near gilette castle
-## from is 41.341021, -73.082404, ansonia
+## to is 40.95119, -73.72723, near mamaroneck
+## from is 41.02752, -73.68818, on merritt just over NY state line
 ## Test the distances
-dodgr_distances(edges_bidirectional, from = test_from, to = test_to)
+dodgr_times(edges_bidirectional, from = test_from, to = test_to, pairwise = TRUE)
 
-# Run network analysis matrix
-dist_matrix = dodgr_distances(
-  edges_bidirectional, 
-  from = origin_coords,
-  to = dest_coords,
-  ## Running pairwise to only test combinations in correspondence table
-  pairwise = TRUE
-)
+# Test on 500 random pairs before the full run
+set.seed(42)
+idx = sample(nrow(pairs), 1000)
+test_times = dodgr_times(edges_bidirectional,
+                         from = origin_coords[idx, ], to = dest_coords[idx, ],
+                         pairwise = TRUE)
+summary(as.numeric(test_times))   # plausible values? any NA?
+## Check
+test_out = pairs[idx, ] %>% mutate(time_test = as.numeric(test_times))
 
+# Full run
+pizza_times = dodgr_times(edges_bidirectional, from = origin_coords,
+                          to = dest_coords, pairwise = TRUE)
+stopifnot(length(pizza_times) == nrow(pairs))  # catches an unexpected N x N result
+
+pairs$time_min = as.numeric(pizza_times)   # name the column with its units
+
+
+# Correction for times
+pairs = pairs %>% 
+  mutate(time_corrected = case_when(
+    time_min < 8.41 ~ time_min*1.976,
+    time_min >= 8.417 & time_min < 15.116 ~ time_min*1.399,
+    time_min >= 15.116 & time_min < 22.648 ~ time_min*1.232,
+    time_min >= 22.648 & time_min < 35.232 ~ time_min*1.187,
+    time_min >= 35.232 ~ time_min*1.074
+  ))
 ```
 
 # Final pairs
@@ -275,28 +967,31 @@ Now that the actual network analysis is out of the way, I need to find the final
 
 ```{r final pairs}
 
-# Join matrix to correspondence table
-pairs = blocks_apizza %>% 
-  mutate(travel_time_sec = dist_matrix) %>% 
-  mutate(travel_time_min = travel_time_sec/60)
-
-# Check some pairs
-head(pairs, n = 25)
-##1:
-##2:
-##3:
-##4:
-##5:
-
+# # Checks some pairs
+# ## Overall tally to search for na; none!
+# sum(is.na(pairs$time_min))
+# ## Smallest 20
+# min = slice_min(pairs, time_min, n = 20)
+# write_clip(min)
+# ## Biggest 20
+# max = slice_max(pairs, time_min, n = 20)
+# write_clip(max)
+# ## Random sample of 200
+# time_check = slice_sample(pairs, n = 200)
+# write_clip(time_check)
 
 # Group to find final pairs
-pairs = pairs %>% 
+pairs_final = pairs %>% 
   group_by(GEOID20) %>% 
-  slice_min(travel_time, n = 1) %>% 
+  slice_min(time_corrected, n = 1) %>% 
   ungroup
 
+# Check number
+nrow(pairs_final)
+nrow(census_blocks)
+
 # Check final output
-slice_sample(pairs, n = 10)
+slice_sample(pairs_final, n = 10)
 
 ```
 
@@ -307,7 +1002,162 @@ With the final pairs produced, I'll want to create a leaflet map with:
 - Blocks colored by closest restaurant (no outlines around blocks so as to make it look clean)
 - Restaurant points
 
-```{r leaflet maps}
+```{r prelim maps}
+
+# Join results onto blocks
+census_blocks_apizza = census_block_shape %>% 
+  left_join(pairs_final %>% select(c("GEOID20", "Name", "pizza_id", "time_min", "time_corrected")), by = join_by("GEOID20" == "GEOID20"))
+
+# Make sure pizza id is factor
+census_blocks_apizza$pizza_id <- as.factor(census_blocks_apizza$pizza_id)
+
+# Map to take a peek
+## Check number of apizza joints
+num_distinct_pizzas <- length(levels(census_blocks_apizza$pizza_id))
+## Define palette
+pizza_palette <- colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(num_distinct_pizzas)
+## Map
+apizza_map_check_block = mapview(
+  census_blocks_apizza,
+  zcol = "pizza_id",            # Map colors directly based on your variable
+  col.regions = pizza_palette,  # Apply the 32-color palette
+  canvas = TRUE,                # Crucial performance boost for 49k+ census blocks
+  legend = TRUE,                # Keeps the interactive legend active to toggle IDs
+  layer.name = "Pizza Zones"
+)
+
+apizza_map_check_shop = mapview(
+  apizza, 
+  col.regions = "black",       # Color of the point icons
+  cex = 5,                    # Size of the point icons
+  layer.name = "Apizza Shops"
+)
+
+apizza_map_check_block + apizza_map_check_shop
+## Looking good! Some weirdness, but this is just a proof of concept so not worried
+
+# Dissolve on pizza ID
+census_blocks_apizza_dissolved = census_blocks_apizza %>% 
+  group_by(pizza_id, Name) %>% 
+  summarise()
+
+## Map to see how it looks
+apizza_map_check_shape = mapview(
+  census_blocks_apizza_dissolved,
+  zcol = "pizza_id",            
+  col.regions = pizza_palette,  
+  canvas = TRUE,                
+  legend = TRUE,                
+  layer.name = "Pizza Zones"
+)
+
+apizza_map_check_shape + apizza_map_check_shop
+
+# For the Apizza Joints, make unique "Name, Town" labels for items that show up more than once
+## Check which
+census_blocks_apizza_dissolved %>% st_drop_geometry() %>%  group_by(Name) %>% tally()
+### Frank Pepe's, Grand Apizza, Sally's
+## Create variable
+census_blocks_apizza_dissolved = census_blocks_apizza_dissolved %>% 
+  mutate(name = case_when(
+    pizza_id == 7 ~ "Frank Pepe's, Stamford",
+    pizza_id == 18 ~ "Frank Pepe's, Fairfield",
+    pizza_id == 21 ~ "Frank Pepe's, Danbury",
+    pizza_id == 35 ~ "Frank Pepe's, Waterbury",
+    pizza_id == 47 ~ "Frank Pepe's, New Haven",
+    pizza_id == 86 ~ "Frank Pepe's, Uncasville",
+    pizza_id == 104 ~ "Frank Pepe's, Manchester",
+    pizza_id == 106 ~ "Frank Pepe's, West Hartford",
+    pizza_id == 74 ~ "Grand Apizza, Madison",
+    pizza_id == 76 ~ "Grand Apizza, Clinton",
+    pizza_id == 8 ~ "Sally's, Stamford",
+    pizza_id == 19 ~ "Sally's, Fairfield",
+    pizza_id == 51 ~ "Sally's, New Haven",
+    pizza_id == 65 ~ "Sally's, Farmington",
+    pizza_id == 11 ~ "Sally's, Wethersfield",
+    .default = Name
+  ))
+
+apizza = apizza %>% 
+  mutate(name = case_when(
+    pizza_id == 7 ~ "Frank Pepe's, Stamford",
+    pizza_id == 18 ~ "Frank Pepe's, Fairfield",
+    pizza_id == 21 ~ "Frank Pepe's, Danbury",
+    pizza_id == 35 ~ "Frank Pepe's, Waterbury",
+    pizza_id == 47 ~ "Frank Pepe's, New Haven",
+    pizza_id == 86 ~ "Frank Pepe's, Uncasville",
+    pizza_id == 104 ~ "Frank Pepe's, Manchester",
+    pizza_id == 106 ~ "Frank Pepe's, West Hartford",
+    pizza_id == 74 ~ "Grand Apizza, Madison",
+    pizza_id == 76 ~ "Grand Apizza, Clinton",
+    pizza_id == 8 ~ "Sally's, Stamford",
+    pizza_id == 19 ~ "Sally's, Fairfield",
+    pizza_id == 51 ~ "Sally's, New Haven",
+    pizza_id == 65 ~ "Sally's, Farmington",
+    pizza_id == 111 ~ "Sally's, Wethersfield",
+    .default = Name
+  ))
+
+
+# Reproject zones
+census_blocks_apizza_dissolved = st_transform(census_blocks_apizza_dissolved, crs = 4326)
+
+```
+
+```{r final leaflet}
+
+# Define palette
+## determine which zones touch
+nb = st_intersects(census_blocks_apizza_dissolved)
+nb = lapply(seq_along(nb), \(i) setdiff(nb[[i]], i))
+
+## Determine number of colors needed, working out from zone w most borders
+ord = order(lengths(nb), decreasing = TRUE)
+col_id = rep(NA_integer_, nrow(census_blocks_apizza_dissolved))
+for (i in ord) {
+  used = col_id[nb[[i]]]
+  col_id[i] = min(setdiff(seq_len(length(nb[[i]]) + 1), used))
+}
+census_blocks_apizza_dissolved$col_id = col_id
+max(col_id)
+
+## Define palette
+pal = colorFactor(RColorBrewer::brewer.pal(max(3, max(col_id)), "Pastel1"),
+                  domain = census_blocks_apizza_dissolved$col_id)
+
+
+# Define specific pizza icon
+pizza_icon = makeAwesomeIcon(
+  text = "🍕"
+)
+
+white_halo = paste("-1.5px -1.5px 0 white", " 1.5px -1.5px 0 white",
+                   "-1.5px  1.5px 0 white", " 1.5px  1.5px 0 white",
+                   " 0px -1.5px 0 white", " 0px  1.5px 0 white",
+                   "-1.5px  0px 0 white", " 1.5px  0px 0 white",
+                   sep = ", ")
+
+# Create leaflet map
+leaflet_map = leaflet(census_blocks_apizza_dissolved) %>% 
+  ## Extent: 
+  setView(-72.6915, 41.6032, 9) %>% 
+  ## Base: based on [this site](https://leaflet-extras.github.io/leaflet-providers/preview/index.html) I like Jawg Streets best
+  addProviderTiles(providers$Stadia.Outdoors) %>% 
+  ## Define polygon style (palette defined earlier, mid opacity, think grey line, name as label)
+  addPolygons(fillColor = ~pal(col_id), fillOpacity = 0.7,
+              color = "grey", weight = 0.5, 
+              label = ~name,
+              highlightOptions = highlightOptions(weight = 3, bringToFront = FALSE)) %>% 
+  ## Add markers for shops and style
+    # addCircleMarkers(data = apizza, radius = 11,
+    #                fillColor = "white", fillOpacity = 1,
+    #                color = "grey50", weight = 3,
+    #                label = ~name) %>%
+  addLabelOnlyMarkers(data = apizza, label = rep("🍕", nrow(apizza)),
+                      labelOptions = labelOptions(
+                        noHide = TRUE, direction = "center", textOnly = TRUE,
+                        style = list("font-size" = "16px",
+                                     "text-shadow" = white_halo)))
 
 
 
