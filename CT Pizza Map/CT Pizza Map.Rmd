@@ -495,19 +495,24 @@ segments = st_read(file.path('Overture Roads Outputs', 'Overture Segments.gpkg')
 connectors = st_read(file.path('Overture Roads Outputs', 'Overture Connectors.gpkg'))
 
 ## Read in Pizza joints
-# all_pizza = st_read(paste0(project_dir, "Pizza Spots Fixed Locations.gpkg"))
+all_pizza = st_read(paste0(project_dir, "All Pizza Shops.gpkg"))
 apizza = st_read(paste0(project_dir, "Apizza Pizza Shops.gpkg"))
-# greek = st_read(paste0(project_dir, "Greek Pizza Shops.gpkg"))
-# neapolitan = st_read(paste0(project_dir, "Neapolitan Pizza Shops.gpkg"))
-# tavern = st_read(paste0(project_dir, "Tavern Pizza Shops.gpkg"))
-# thick = st_read(paste0(project_dir, "Thick Pizza Shops.gpkg"))
+greek = st_read(paste0(project_dir, "Greek Pizza Shops.gpkg"))
+neapolitan = st_read(paste0(project_dir, "Neapolitan Pizza Shops.gpkg"))
+tavern = st_read(paste0(project_dir, "Tavern Pizza Shops.gpkg"))
+thick = st_read(paste0(project_dir, "Thick Pizza Shops.gpkg"))
 
 ## Read in census blocks
-census_blocks = st_read(paste0(project_dir, "Clean Census Blocks.gpkg"))
-census_block_shape = st_read(paste0(project_dir, "Clean Census Blocks.gpkg"))
+census_blocks = st_read(paste0(project_dir, "tl_2025_09_bg/tl_2025_09_bg.shp"))
+census_block_shape = st_read(paste0(project_dir, "tl_2025_09_bg/tl_2025_09_bg.shp"))
 
 ## Read in correspondence table
-blocks_apizza = read.csv(paste0(project_dir, "Blocks with Apizza Joints.csv"), header = TRUE, check.names=FALSE)
+blocks_all = read.csv(paste0(project_dir, "Block Groups with Pizza Joints.csv"), header = TRUE, check.names=FALSE)
+blocks_apizza = read.csv(paste0(project_dir, "Block Groups with Apizza Joints.csv"), header = TRUE, check.names=FALSE)
+blocks_greek = read.csv(paste0(project_dir, "Block Groups with Greek Joints.csv"), header = TRUE, check.names=FALSE)
+blocks_neapolitan = read.csv(paste0(project_dir, "Block Groups with Neapolitan Joints.csv"), header = TRUE, check.names=FALSE)
+blocks_tavern = read.csv(paste0(project_dir, "Block Groups with Tavern Joints.csv"), header = TRUE, check.names=FALSE)
+blocks_thick = read.csv(paste0(project_dir, "Block Groups with Thick Joints.csv"), header = TRUE, check.names=FALSE)
 
 ## Read in state boundary file
 state_shape = st_read(paste0(project_dir, "/tl_2025_us_state/tl_2025_us_state.shp"))
@@ -520,17 +525,135 @@ Next, I'm going to work on prepping shapefiles for processing
 ```{r shapefiles}
 
 # Pizza
+## All pizza
+all_pizza = all_pizza %>% 
+  st_transform(4326) %>% 
+  mutate(name = paste0(Name, ", ", City)) %>% 
+  mutate(address = str_replace(formatted_, ", [A-Z]{2}\\s+\\d{5},\\s+USA$", "")) %>% 
+  mutate(address = case_when(
+    unique_id == 1 ~ "1 Grigg St, Greenwich",
+    unique_id == 89 ~ "27 Coogan Blvd Bldg 8, Mystic",
+    unique_id == 59 ~ "22 Union City Rd, Prospect",
+    unique_id == 5 ~ "2010 W Main St, Stamford",
+    unique_id == 6 ~ "234 Stillwater Ave, Stamford",
+    unique_id == 117 ~ "Tradewinds Plaza, 749 Saybrook Rd, Middletown",
+    unique_id == 26 ~ "179 Union Ave, West Haven",
+    .default = address
+  )) %>% 
+  mutate(id = row_number()) %>% 
+  select(unique_id, name, address, Type, apizza, greek, neapolitan, tavern, thick, geom) %>% 
+  rename(pizza_id = unique_id) %>% 
+  rename(type = Type) %>% 
+  mutate(n_styles = rowSums(across(all_of(c("apizza", "greek", "neapolitan", "tavern", "thick"))), na.rm = TRUE)) %>% 
+  mutate(simple_type = case_when(n_styles > 1 ~ "Multiple styles",
+                                 apizza == 1 ~ "New Haven style 'Apizza'",
+                                 greek == 1 ~ "New England Greek pizza",
+                                 neapolitan == 1 ~ "Neapolitan pizza",
+                                 tavern == 1 ~ "Tavern style pizza",
+                                 thick == 1 ~ "Thick crust pizza")) %>% 
+  mutate(complete_type = case_when(n_styles == 1 ~ simple_type,
+                                   n_styles == 3 ~ "New Haven style 'Apizza', Neapolitan pizza, and thick crust pizza",
+                                   n_styles == 2 ~ "Neapolitan and thick crust pizza")) %>% 
+  select(-c(n_styles, type, apizza, greek, neapolitan, thick, tavern))
+
+
+## Others
+### Apizza
 apizza = apizza %>% 
   st_transform(4326) %>% 
+  mutate(name = paste0(Name, ", ", City)) %>% 
+  mutate(address = str_replace(formatted_, ", [A-Z]{2}\\s+\\d{5},\\s+USA$", "")) %>% 
+  mutate(address = case_when(
+    unique_id == 1 ~ "1 Grigg St, Greenwich",
+    unique_id == 89 ~ "27 Coogan Blvd Bldg 8, Mystic",
+    unique_id == 59 ~ "22 Union City Rd, Prospect",
+    unique_id == 5 ~ "2010 W Main St, Stamford",
+    unique_id == 6 ~ "234 Stillwater Ave, Stamford",
+    unique_id == 117 ~ "Tradewinds Plaza, 749 Saybrook Rd, Middletown",
+    unique_id == 26 ~ "179 Union Ave, West Haven",
+    .default = address
+  )) %>% 
   mutate(id = row_number()) %>% 
-  select(unique_id, Name, geom) %>% 
+  select(unique_id, name, address, geom) %>% 
+  rename(pizza_id = unique_id)
+### Greek
+greek = greek %>% 
+  st_transform(4326) %>% 
+  mutate(name = paste0(Name, ", ", City)) %>% 
+  mutate(address = str_replace(formatted_, ", [A-Z]{2}\\s+\\d{5},\\s+USA$", "")) %>% 
+  mutate(address = case_when(
+    unique_id == 1 ~ "1 Grigg St, Greenwich",
+    unique_id == 89 ~ "27 Coogan Blvd Bldg 8, Mystic",
+    unique_id == 59 ~ "22 Union City Rd, Prospect",
+    unique_id == 5 ~ "2010 W Main St, Stamford",
+    unique_id == 6 ~ "234 Stillwater Ave, Stamford",
+    unique_id == 117 ~ "Tradewinds Plaza, 749 Saybrook Rd, Middletown",
+    unique_id == 26 ~ "179 Union Ave, West Haven",
+    .default = address
+  )) %>% 
+  mutate(id = row_number()) %>% 
+  select(unique_id, name, address, geom) %>% 
+  rename(pizza_id = unique_id)
+### Neapolitan
+neapolitan = neapolitan %>% 
+  st_transform(4326) %>% 
+  mutate(name = paste0(Name, ", ", City)) %>% 
+  mutate(address = str_replace(formatted_, ", [A-Z]{2}\\s+\\d{5},\\s+USA$", "")) %>% 
+  mutate(address = case_when(
+    unique_id == 1 ~ "1 Grigg St, Greenwich",
+    unique_id == 89 ~ "27 Coogan Blvd Bldg 8, Mystic",
+    unique_id == 59 ~ "22 Union City Rd, Prospect",
+    unique_id == 5 ~ "2010 W Main St, Stamford",
+    unique_id == 6 ~ "234 Stillwater Ave, Stamford",
+    unique_id == 117 ~ "Tradewinds Plaza, 749 Saybrook Rd, Middletown",
+    unique_id == 26 ~ "179 Union Ave, West Haven",
+    .default = address
+  )) %>% 
+  mutate(id = row_number()) %>% 
+  select(unique_id, name, address, geom) %>% 
+  rename(pizza_id = unique_id)
+### Tavern
+tavern = tavern %>% 
+  st_transform(4326) %>% 
+  mutate(name = paste0(Name, ", ", City)) %>% 
+  mutate(address = str_replace(formatted_, ", [A-Z]{2}\\s+\\d{5},\\s+USA$", "")) %>% 
+  mutate(address = case_when(
+    unique_id == 1 ~ "1 Grigg St, Greenwich",
+    unique_id == 89 ~ "27 Coogan Blvd Bldg 8, Mystic",
+    unique_id == 59 ~ "22 Union City Rd, Prospect",
+    unique_id == 5 ~ "2010 W Main St, Stamford",
+    unique_id == 6 ~ "234 Stillwater Ave, Stamford",
+    unique_id == 117 ~ "Tradewinds Plaza, 749 Saybrook Rd, Middletown",
+    unique_id == 26 ~ "179 Union Ave, West Haven",
+    .default = address
+  )) %>% 
+  mutate(id = row_number()) %>% 
+  select(unique_id, name, address, geom) %>% 
+  rename(pizza_id = unique_id)
+### Thick
+thick = thick %>% 
+  st_transform(4326) %>% 
+  mutate(name = paste0(Name, ", ", City)) %>% 
+  mutate(address = str_replace(formatted_, ", [A-Z]{2}\\s+\\d{5},\\s+USA$", "")) %>% 
+  mutate(address = case_when(
+    unique_id == 1 ~ "1 Grigg St, Greenwich",
+    unique_id == 89 ~ "27 Coogan Blvd Bldg 8, Mystic",
+    unique_id == 59 ~ "22 Union City Rd, Prospect",
+    unique_id == 5 ~ "2010 W Main St, Stamford",
+    unique_id == 6 ~ "234 Stillwater Ave, Stamford",
+    unique_id == 117 ~ "Tradewinds Plaza, 749 Saybrook Rd, Middletown",
+    unique_id == 26 ~ "179 Union Ave, West Haven",
+    .default = address
+  )) %>% 
+  mutate(id = row_number()) %>% 
+  select(unique_id, name, address, geom) %>% 
   rename(pizza_id = unique_id)
 
 # Census geog
-census_blocks = census_blocks %>% 
+census_blocks_centeroid = census_blocks %>% 
   st_transform(4326) %>%
   st_centroid() %>% 
-  select(GEOID20, geom)
+  select(GEOIDFQ, geometry)
 
 # CT boundary
 conn = state_shape %>% 
@@ -544,19 +667,46 @@ After processing the shapefiles a bit further to get them ready for network anal
 
 ```{r correspondence}
 
-# Remove extraneous variables
+# Remove extraneous variables from correspondence tables
+## All
+blocks_all = blocks_all %>% 
+  mutate(name = paste0(Name, ", ", City)) %>% 
+  select(GEOIDFQ, name, unique_id) %>% 
+  rename(pizza_id = unique_id)
+## Apizza
 blocks_apizza = blocks_apizza %>% 
-  select(GEOID20, Name, unique_id) %>% 
-  rename(pizza_id = unique_id) %>% 
-  mutate(GEOID20 = str_pad(GEOID20, width = 15, pad = "0"))
+  mutate(name = paste0(Name, ", ", City)) %>% 
+  select(GEOIDFQ, name, unique_id) %>% 
+  rename(pizza_id = unique_id)
+## Greek
+blocks_greek = blocks_greek %>% 
+  mutate(name = paste0(Name, ", ", City)) %>% 
+  select(GEOIDFQ, name, unique_id) %>% 
+  rename(pizza_id = unique_id)
+## Neapolitan
+blocks_neapolitan = blocks_neapolitan %>% 
+  mutate(name = paste0(Name, ", ", City)) %>% 
+  select(GEOIDFQ, name, unique_id) %>% 
+  rename(pizza_id = unique_id)
+## Tavern
+blocks_tavern = blocks_tavern %>% 
+  mutate(name = paste0(Name, ", ", City)) %>% 
+  select(GEOIDFQ, name, unique_id) %>% 
+  rename(pizza_id = unique_id)
+## Thick
+blocks_thick = blocks_thick %>% 
+  mutate(name = paste0(Name, ", ", City)) %>% 
+  select(GEOIDFQ, name, unique_id) %>%  
+  rename(pizza_id = unique_id)
+
 
 # Check that variables line up
 ## Variable type
-class(blocks_apizza$GEOID20) == class(census_blocks$GEOID20)
+class(blocks_apizza$GEOIDFQ) == class(census_blocks_centeroid$GEOIDFQ)
 class(blocks_apizza$pizza_id) == class(apizza$pizza_id)
 
 ## Spot check values
-head(blocks_apizza$GEOID20) %in% census_blocks$GEOID20
+head(blocks_apizza$GEOIDFQ) %in% census_blocks_centeroid$GEOIDFQ
 head(blocks_apizza$pizza_id) %in% apizza$pizza_id
 ```
 
@@ -865,7 +1015,7 @@ Now that the graph is prepped, I can go into actually computing the distances be
 
 After putting together a test run of 1000 randomly sampled rows, I wrote out the resulting table with its coordinates to check out the real drive times per online mapping tools. After obtaining the travel times for each of the coordinate pairs via Google Maps (using the guidance provided [here](https://medium.com/@omniview/using-google-apps-scripts-to-calculate-realtime-driving-distance-time-33e58cdd54d7)), I calculated a correction for each row (Google Maps trip time divided by network analysis trip time), broke the network analysis trip times into quintiles, found the boundaries of those quintiles, and calculated an average correction for each group so that I could calculate more realistic travel times for each pair without resorting to nearly 300,000 individual routing requests.
 
-```{r network analysis}
+```{r network analysis all}
 
 # Prepare edges 
 edges_bidirectional = edges_bidirectional %>% 
@@ -877,50 +1027,50 @@ edges_bidirectional = edges_bidirectional %>%
 
 # Guard against key problems that would silently break alignment
 stopifnot(
-  !anyDuplicated(census_blocks$GEOID20),
-  !anyDuplicated(apizza$pizza_id),
-  !anyDuplicated(blocks_apizza[c("GEOID20", "pizza_id")])
+  !anyDuplicated(census_blocks_centeroid$GEOIDFQ),
+  !anyDuplicated(all_pizza$pizza_id),
+  !anyDuplicated(blocks_all[c("GEOIDFQ", "pizza_id")])
 )
 
 # Coordinate lookups, keyed (select only what you need so Name doesn't collide)
-block_xy = census_blocks %>%
+block_xy = census_blocks_centeroid %>%
   st_drop_geometry() %>%
-  bind_cols(st_coordinates(census_blocks)) %>%
-  select(GEOID20, o_x = X, o_y = Y)
+  bind_cols(st_coordinates(census_blocks_centeroid)) %>%
+  select(GEOIDFQ, o_x = X, o_y = Y)
 
-pizza_xy = apizza %>%
+pizza_xy = all_pizza %>%
   st_drop_geometry() %>%
-  bind_cols(st_coordinates(apizza)) %>%
+  bind_cols(st_coordinates(all_pizza)) %>%
   select(pizza_id, d_x = X, d_y = Y)
 
 # One row per block-shop pair, coordinates attached by key
-pairs = blocks_apizza %>%
-  left_join(block_xy, by = "GEOID20") %>%
+pairs_all = blocks_all %>%
+  left_join(block_xy, by = "GEOIDFQ") %>%
   left_join(pizza_xy, by = "pizza_id")
 
-stopifnot(nrow(pairs) == nrow(blocks_apizza),
-          !anyNA(pairs[c("o_x", "o_y", "d_x", "d_y")]))
+stopifnot(nrow(pairs_all) == nrow(blocks_all),
+          !anyNA(pairs_all[c("o_x", "o_y", "d_x", "d_y")]))
 
 # Matrices come from the table, so row i of each belongs to row i of pairs
-origin_coords = as.matrix(pairs[c("o_x", "o_y")]); colnames(origin_coords) = c("x", "y")
-dest_coords   = as.matrix(pairs[c("d_x", "d_y")]); colnames(dest_coords)   = c("x", "y")
+origin_coords_all = as.matrix(pairs_all[c("o_x", "o_y")]); colnames(origin_coords_all) = c("x", "y")
+dest_coords_all   = as.matrix(pairs_all[c("d_x", "d_y")]); colnames(dest_coords_all)   = c("x", "y")
 
 # Verify CRS
-st_crs(census_blocks)
-st_crs(apizza)
+st_crs(census_blocks_centeroid)
+st_crs(all_pizza)
 st_crs(edges_df_clean)
-st_crs(edges_df_clean) == st_crs(census_blocks)
-st_crs(edges_df_clean) == st_crs(apizza)
+st_crs(edges_df_clean) == st_crs(census_blocks_centeroid)
+st_crs(edges_df_clean) == st_crs(all_pizza)
 
 # Verify bounding box
-st_bbox(apizza)
+st_bbox(all_pizza)
 st_bbox(edges_df_clean)
-st_bbox(census_blocks)
+st_bbox(census_blocks_centeroid)
 
 # Verify numbers
-nrow(origin_coords) == nrow(dest_coords)  # required for pairwise = TRUE
-sum(is.na(origin_coords))  # any unmatched GEOID20 in the join?
-sum(is.na(dest_coords))    # any unmatched pizza_id?
+nrow(origin_coords_all) == nrow(dest_coords_all)  # required for pairwise = TRUE
+sum(is.na(origin_coords_all))  # any unmatched GEOID20 in the join?
+sum(is.na(dest_coords_all))    # any unmatched pizza_id?
 
 # Test run, first and last row of edges
 test_from <- matrix(c(edges_bidirectional$from_lon[1], edges_bidirectional$from_lat[1]), nrow = 1)
@@ -934,24 +1084,25 @@ dodgr_times(edges_bidirectional, from = test_from, to = test_to, pairwise = TRUE
 
 # Test on 500 random pairs before the full run
 set.seed(42)
-idx = sample(nrow(pairs), 1000)
+idx = sample(nrow(pairs_all), 1000)
 test_times = dodgr_times(edges_bidirectional,
-                         from = origin_coords[idx, ], to = dest_coords[idx, ],
+                         from = origin_coords_all[idx, ], to = dest_coords_all[idx, ],
                          pairwise = TRUE)
 summary(as.numeric(test_times))   # plausible values? any NA?
 ## Check
-test_out = pairs[idx, ] %>% mutate(time_test = as.numeric(test_times))
+test_out = pairs_all[idx, ] %>% mutate(time_test = as.numeric(test_times))
+write_clip(test_out)
 
 # Full run
-pizza_times = dodgr_times(edges_bidirectional, from = origin_coords,
-                          to = dest_coords, pairwise = TRUE)
-stopifnot(length(pizza_times) == nrow(pairs))  # catches an unexpected N x N result
+all_pizza_times = dodgr_times(edges_bidirectional, from = origin_coords_all,
+                          to = dest_coords_all, pairwise = TRUE)
+stopifnot(length(all_pizza_times) == nrow(pairs_all))  # catches an unexpected N x N result
 
-pairs$time_min = as.numeric(pizza_times)   # name the column with its units
+pairs_all$time_min = as.numeric(all_pizza_times)   # name the column with its units
 
 
 # Correction for times
-pairs = pairs %>% 
+pairs_all = pairs_all %>% 
   mutate(time_corrected = case_when(
     time_min < 8.41 ~ time_min*1.976,
     time_min >= 8.417 & time_min < 15.116 ~ time_min*1.399,
@@ -960,6 +1111,337 @@ pairs = pairs %>%
     time_min >= 35.232 ~ time_min*1.074
   ))
 ```
+
+```{r network analysis apizza}
+
+# Prepare edges 
+## Don't need, already done
+
+# Guard against key problems that would silently break alignment
+stopifnot(
+  !anyDuplicated(census_blocks_centeroid$GEOIDFQ),
+  !anyDuplicated(apizza$pizza_id),
+  !anyDuplicated(blocks_apizza[c("GEOIDFQ", "pizza_id")])
+)
+
+# Coordinate lookups, keyed (select only what you need so Name doesn't collide)
+apizza_xy = apizza %>%
+  st_drop_geometry() %>%
+  bind_cols(st_coordinates(apizza)) %>%
+  select(pizza_id, d_x = X, d_y = Y)
+
+# One row per block-shop pair, coordinates attached by key
+pairs_apizza = blocks_apizza %>%
+  left_join(block_xy, by = "GEOIDFQ") %>%
+  left_join(apizza_xy, by = "pizza_id")
+
+stopifnot(nrow(pairs_apizza) == nrow(blocks_apizza),
+          !anyNA(pairs_apizza[c("o_x", "o_y", "d_x", "d_y")]))
+
+# Matrices come from the table, so row i of each belongs to row i of pairs
+origin_coords_apizza = as.matrix(pairs_apizza[c("o_x", "o_y")]); colnames(origin_coords_apizza) = c("x", "y")
+dest_coords_apizza   = as.matrix(pairs_apizza[c("d_x", "d_y")]); colnames(dest_coords_apizza)   = c("x", "y")
+
+# Verify CRS
+st_crs(census_blocks_centeroid)
+st_crs(apizza)
+st_crs(edges_df_clean)
+st_crs(edges_df_clean) == st_crs(census_blocks_centeroid)
+st_crs(edges_df_clean) == st_crs(apizza)
+
+# Verify bounding box
+st_bbox(apizza)
+st_bbox(edges_df_clean)
+st_bbox(census_blocks_centeroid)
+
+# Verify numbers
+nrow(origin_coords_apizza) == nrow(dest_coords_apizza)  # required for pairwise = TRUE
+sum(is.na(origin_coords_apizza))  # any unmatched GEOID20 in the join?
+sum(is.na(dest_coords_apizza))    # any unmatched pizza_id?
+
+# Full run
+apizza_times = dodgr_times(edges_bidirectional, from = origin_coords_apizza,
+                          to = dest_coords_apizza, pairwise = TRUE)
+stopifnot(length(apizza_times) == nrow(pairs_apizza))  # catches an unexpected N x N result
+
+pairs_apizza$time_min = as.numeric(apizza_times)   # name the column with its units
+
+
+# Correction for times
+pairs_apizza = pairs_apizza %>% 
+  mutate(time_corrected = case_when(
+    time_min < 8.41 ~ time_min*1.976,
+    time_min >= 8.417 & time_min < 15.116 ~ time_min*1.399,
+    time_min >= 15.116 & time_min < 22.648 ~ time_min*1.232,
+    time_min >= 22.648 & time_min < 35.232 ~ time_min*1.187,
+    time_min >= 35.232 ~ time_min*1.074
+  ))
+```
+
+```{r network analysis greek}
+
+# Prepare edges 
+## Don't need to do, already ready
+
+# Guard against key problems that would silently break alignment
+stopifnot(
+  !anyDuplicated(census_blocks_centeroid$GEOIDFQ),
+  !anyDuplicated(greek$pizza_id),
+  !anyDuplicated(blocks_greek[c("GEOIDFQ", "pizza_id")])
+)
+
+# Coordinate lookups, keyed (select only what you need so Name doesn't collide)
+greek_xy = greek %>%
+  st_drop_geometry() %>%
+  bind_cols(st_coordinates(greek)) %>%
+  select(pizza_id, d_x = X, d_y = Y)
+
+# One row per block-shop pair, coordinates attached by key
+pairs_greek = blocks_greek %>%
+  left_join(block_xy, by = "GEOIDFQ") %>%
+  left_join(greek_xy, by = "pizza_id")
+
+stopifnot(nrow(pairs_greek) == nrow(blocks_greek),
+          !anyNA(pairs_greek[c("o_x", "o_y", "d_x", "d_y")]))
+
+# Matrices come from the table, so row i of each belongs to row i of pairs
+origin_coords_greek = as.matrix(pairs_greek[c("o_x", "o_y")]); colnames(origin_coords_greek) = c("x", "y")
+dest_coords_greek   = as.matrix(pairs_greek[c("d_x", "d_y")]); colnames(dest_coords_greek)   = c("x", "y")
+
+# Verify CRS
+st_crs(census_blocks_centeroid)
+st_crs(greek)
+st_crs(edges_df_clean)
+st_crs(edges_df_clean) == st_crs(census_blocks_centeroid)
+st_crs(edges_df_clean) == st_crs(greek)
+
+# Verify bounding box
+st_bbox(greek)
+st_bbox(edges_df_clean)
+st_bbox(census_blocks_centeroid)
+
+# Verify numbers
+nrow(origin_coords_greek) == nrow(dest_coords_greek)  # required for pairwise = TRUE
+sum(is.na(origin_coords_greek))  # any unmatched GEOID20 in the join?
+sum(is.na(dest_coords_greek))    # any unmatched pizza_id?
+
+# Full run
+greek_times = dodgr_times(edges_bidirectional, from = origin_coords_greek,
+                          to = dest_coords_greek, pairwise = TRUE)
+stopifnot(length(greek_times) == nrow(pairs_greek))  # catches an unexpected N x N result
+
+pairs_greek$time_min = as.numeric(greek_times)   # name the column with its units
+
+
+# Correction for times
+pairs_greek = pairs_greek %>% 
+  mutate(time_corrected = case_when(
+    time_min < 8.41 ~ time_min*1.976,
+    time_min >= 8.417 & time_min < 15.116 ~ time_min*1.399,
+    time_min >= 15.116 & time_min < 22.648 ~ time_min*1.232,
+    time_min >= 22.648 & time_min < 35.232 ~ time_min*1.187,
+    time_min >= 35.232 ~ time_min*1.074
+  ))
+```
+
+```{r network analysis neapolitan}
+
+# Prepare edges 
+## Don't need, already done
+
+# Guard against key problems that would silently break alignment
+stopifnot(
+  !anyDuplicated(census_blocks_centeroid$GEOIDFQ),
+  !anyDuplicated(neapolitan$pizza_id),
+  !anyDuplicated(blocks_apizza[c("GEOIDFQ", "pizza_id")])
+)
+
+# Coordinate lookups, keyed (select only what you need so Name doesn't collide)
+neapolitan_xy = neapolitan %>%
+  st_drop_geometry() %>%
+  bind_cols(st_coordinates(neapolitan)) %>%
+  select(pizza_id, d_x = X, d_y = Y)
+
+# One row per block-shop pair, coordinates attached by key
+pairs_neapolitan = blocks_neapolitan %>%
+  left_join(block_xy, by = "GEOIDFQ") %>%
+  left_join(neapolitan_xy, by = "pizza_id")
+
+stopifnot(nrow(pairs_neapolitan) == nrow(blocks_neapolitan),
+          !anyNA(pairs_neapolitan[c("o_x", "o_y", "d_x", "d_y")]))
+
+# Matrices come from the table, so row i of each belongs to row i of pairs
+origin_coords_neapolitan = as.matrix(pairs_neapolitan[c("o_x", "o_y")]); colnames(origin_coords_neapolitan) = c("x", "y")
+dest_coords_neapolitan   = as.matrix(pairs_neapolitan[c("d_x", "d_y")]); colnames(dest_coords_neapolitan)   = c("x", "y")
+
+# Verify CRS
+st_crs(census_blocks_centeroid)
+st_crs(neapolitan)
+st_crs(edges_df_clean)
+st_crs(edges_df_clean) == st_crs(census_blocks_centeroid)
+st_crs(edges_df_clean) == st_crs(neapolitan)
+
+# Verify bounding box
+st_bbox(neapolitan)
+st_bbox(edges_df_clean)
+st_bbox(census_blocks_centeroid)
+
+# Verify numbers
+nrow(origin_coords_neapolitan) == nrow(dest_coords_neapolitan)  # required for pairwise = TRUE
+sum(is.na(origin_coords_neapolitan))  # any unmatched GEOID20 in the join?
+sum(is.na(dest_coords_neapolitan))    # any unmatched pizza_id?
+
+# Full run
+neapolitan_times = dodgr_times(edges_bidirectional, from = origin_coords_neapolitan,
+                          to = dest_coords_neapolitan, pairwise = TRUE)
+stopifnot(length(neapolitan_times) == nrow(pairs_neapolitan))  # catches an unexpected N x N result
+
+pairs_neapolitan$time_min = as.numeric(neapolitan_times)   # name the column with its units
+
+
+# Correction for times
+pairs_neapolitan = pairs_neapolitan %>% 
+  mutate(time_corrected = case_when(
+    time_min < 8.41 ~ time_min*1.976,
+    time_min >= 8.417 & time_min < 15.116 ~ time_min*1.399,
+    time_min >= 15.116 & time_min < 22.648 ~ time_min*1.232,
+    time_min >= 22.648 & time_min < 35.232 ~ time_min*1.187,
+    time_min >= 35.232 ~ time_min*1.074
+  ))
+```
+
+```{r network analysis tavern}
+
+# Prepare edges 
+## Don't need, already done
+
+# Guard against key problems that would silently break alignment
+stopifnot(
+  !anyDuplicated(census_blocks_centeroid$GEOIDFQ),
+  !anyDuplicated(tavern$pizza_id),
+  !anyDuplicated(blocks_tavern[c("GEOIDFQ", "pizza_id")])
+)
+
+# Coordinate lookups, keyed (select only what you need so Name doesn't collide)
+tavern_xy = tavern %>%
+  st_drop_geometry() %>%
+  bind_cols(st_coordinates(tavern)) %>%
+  select(pizza_id, d_x = X, d_y = Y)
+
+# One row per block-shop pair, coordinates attached by key
+pairs_tavern = blocks_tavern %>%
+  left_join(block_xy, by = "GEOIDFQ") %>%
+  left_join(tavern_xy, by = "pizza_id")
+
+stopifnot(nrow(pairs_tavern) == nrow(blocks_tavern),
+          !anyNA(pairs_tavern[c("o_x", "o_y", "d_x", "d_y")]))
+
+# Matrices come from the table, so row i of each belongs to row i of pairs
+origin_coords_tavern = as.matrix(pairs_tavern[c("o_x", "o_y")]); colnames(origin_coords_tavern) = c("x", "y")
+dest_coords_tavern   = as.matrix(pairs_tavern[c("d_x", "d_y")]); colnames(dest_coords_tavern)   = c("x", "y")
+
+# Verify CRS
+st_crs(census_blocks_centeroid)
+st_crs(tavern)
+st_crs(edges_df_clean)
+st_crs(edges_df_clean) == st_crs(census_blocks_centeroid)
+st_crs(edges_df_clean) == st_crs(tavern)
+
+# Verify bounding box
+st_bbox(tavern)
+st_bbox(edges_df_clean)
+st_bbox(census_blocks_centeroid)
+
+# Verify numbers
+nrow(origin_coords_tavern) == nrow(dest_coords_tavern)  # required for pairwise = TRUE
+sum(is.na(origin_coords_tavern))  # any unmatched GEOID20 in the join?
+sum(is.na(dest_coords_tavern))    # any unmatched pizza_id?
+
+# Full run
+tavern_times = dodgr_times(edges_bidirectional, from = origin_coords_tavern,
+                          to = dest_coords_tavern, pairwise = TRUE)
+stopifnot(length(tavern_times) == nrow(pairs_tavern))  # catches an unexpected N x N result
+
+pairs_tavern$time_min = as.numeric(tavern_times)   # name the column with its units
+
+
+# Correction for times
+pairs_tavern = pairs_tavern %>% 
+  mutate(time_corrected = case_when(
+    time_min < 8.41 ~ time_min*1.976,
+    time_min >= 8.417 & time_min < 15.116 ~ time_min*1.399,
+    time_min >= 15.116 & time_min < 22.648 ~ time_min*1.232,
+    time_min >= 22.648 & time_min < 35.232 ~ time_min*1.187,
+    time_min >= 35.232 ~ time_min*1.074
+  ))
+```
+
+```{r network analysis thick}
+
+# Prepare edges 
+## Don't need, already done
+
+# Guard against key problems that would silently break alignment
+stopifnot(
+  !anyDuplicated(census_blocks_centeroid$GEOIDFQ),
+  !anyDuplicated(thick$pizza_id),
+  !anyDuplicated(blocks_thick[c("GEOIDFQ", "pizza_id")])
+)
+
+# Coordinate lookups, keyed (select only what you need so Name doesn't collide)
+thick_xy = thick %>%
+  st_drop_geometry() %>%
+  bind_cols(st_coordinates(thick)) %>%
+  select(pizza_id, d_x = X, d_y = Y)
+
+# One row per block-shop pair, coordinates attached by key
+pairs_thick = blocks_thick %>%
+  left_join(block_xy, by = "GEOIDFQ") %>%
+  left_join(thick_xy, by = "pizza_id")
+
+stopifnot(nrow(pairs_thick) == nrow(blocks_thick),
+          !anyNA(pairs_thick[c("o_x", "o_y", "d_x", "d_y")]))
+
+# Matrices come from the table, so row i of each belongs to row i of pairs
+origin_coords_thick = as.matrix(pairs_thick[c("o_x", "o_y")]); colnames(origin_coords_thick) = c("x", "y")
+dest_coords_thick   = as.matrix(pairs_thick[c("d_x", "d_y")]); colnames(dest_coords_thick)   = c("x", "y")
+
+# Verify CRS
+st_crs(census_blocks_centeroid)
+st_crs(thick)
+st_crs(edges_df_clean)
+st_crs(edges_df_clean) == st_crs(census_blocks_centeroid)
+st_crs(edges_df_clean) == st_crs(thick)
+
+# Verify bounding box
+st_bbox(thick)
+st_bbox(edges_df_clean)
+st_bbox(census_blocks_centeroid)
+
+# Verify numbers
+nrow(origin_coords_thick) == nrow(dest_coords_thick)  # required for pairwise = TRUE
+sum(is.na(origin_coords_thick))  # any unmatched GEOID20 in the join?
+sum(is.na(dest_coords_thick))    # any unmatched pizza_id?
+
+# Full run
+thick_times = dodgr_times(edges_bidirectional, from = origin_coords_thick,
+                          to = dest_coords_thick, pairwise = TRUE)
+stopifnot(length(thick_times) == nrow(pairs_thick))  # catches an unexpected N x N result
+
+pairs_thick$time_min = as.numeric(thick_times)   # name the column with its units
+
+
+# Correction for times
+pairs_thick = pairs_thick %>% 
+  mutate(time_corrected = case_when(
+    time_min < 8.41 ~ time_min*1.976,
+    time_min >= 8.417 & time_min < 15.116 ~ time_min*1.399,
+    time_min >= 15.116 & time_min < 22.648 ~ time_min*1.232,
+    time_min >= 22.648 & time_min < 35.232 ~ time_min*1.187,
+    time_min >= 35.232 ~ time_min*1.074
+  ))
+```
+
 
 # Final pairs
 
@@ -981,17 +1463,62 @@ Now that the actual network analysis is out of the way, I need to find the final
 # write_clip(time_check)
 
 # Group to find final pairs
-pairs_final = pairs %>% 
-  group_by(GEOID20) %>% 
-  slice_min(time_corrected, n = 1) %>% 
+## Overall
+pairs_all_final = pairs_all %>% 
+  group_by(GEOIDFQ) %>% 
+  slice_min(time_min, n = 1) %>% 
+  ungroup
+## Others
+### Apizza
+pairs_apizza_final = pairs_apizza %>% 
+  group_by(GEOIDFQ) %>% 
+  slice_min(time_min, n = 1) %>% 
+  ungroup
+### Greek
+pairs_greek_final = pairs_greek %>% 
+  group_by(GEOIDFQ) %>% 
+  slice_min(time_min, n = 1) %>% 
+  ungroup
+### Neapolitan
+pairs_neapolitan_final = pairs_neapolitan %>% 
+  group_by(GEOIDFQ) %>% 
+  slice_min(time_min, n = 1) %>% 
+  ungroup
+### Tavern
+pairs_tavern_final = pairs_tavern %>% 
+  group_by(GEOIDFQ) %>% 
+  slice_min(time_min, n = 1) %>% 
+  ungroup
+### Thick
+pairs_thick_final = pairs_thick %>% 
+  group_by(GEOIDFQ) %>% 
+  slice_min(time_min, n = 1) %>% 
   ungroup
 
 # Check number
-nrow(pairs_final)
-nrow(census_blocks)
+nrow(pairs_all_final)
+nrow(pairs_apizza_final)
+nrow(pairs_greek_final)
+nrow(pairs_neapolitan_final)
+nrow(pairs_tavern_final)
+nrow(pairs_thick_final)
+nrow(census_blocks_centeroid)
 
 # Check final output
-slice_sample(pairs_final, n = 10)
+rand_all = slice_sample(pairs_all_final, n = 10)
+rand_apizza = slice_sample(pairs_apizza_final, n = 10)
+rand_greek = slice_sample(pairs_greek_final, n = 10)
+rand_neapolitan = slice_sample(pairs_neapolitan_final, n = 10)
+rand_tavern = slice_sample(pairs_tavern_final, n = 10)
+rand_thick = slice_sample(pairs_thick_final, n = 10)
+
+
+# Random check of corrected vs raw time for apizza
+pairs_apizza_final_corrected_time = pairs_apizza %>% 
+  group_by(GEOIDFQ) %>% 
+  slice_min(time_corrected, n = 1) %>% 
+  ungroup
+
 
 ```
 
@@ -1005,11 +1532,33 @@ With the final pairs produced, I'll want to create a leaflet map with:
 ```{r prelim maps}
 
 # Join results onto blocks
+## Overall
+census_blocks_all = census_block_shape %>% 
+  left_join(pairs_all_final %>% select(c("GEOIDFQ", "name", "pizza_id", "time_min", "time_corrected")), by = join_by("GEOIDFQ" == "GEOIDFQ"))
+## Others
+### Apizza
 census_blocks_apizza = census_block_shape %>% 
-  left_join(pairs_final %>% select(c("GEOID20", "Name", "pizza_id", "time_min", "time_corrected")), by = join_by("GEOID20" == "GEOID20"))
+  left_join(pairs_apizza_final %>% select(c("GEOIDFQ", "name", "pizza_id", "time_min", "time_corrected")), by = join_by("GEOIDFQ" == "GEOIDFQ"))
+### Greek
+census_blocks_greek = census_block_shape %>% 
+  left_join(pairs_greek_final %>% select(c("GEOIDFQ", "name", "pizza_id", "time_min", "time_corrected")), by = join_by("GEOIDFQ" == "GEOIDFQ"))
+### Neapolitan
+census_blocks_neapolitan = census_block_shape %>% 
+  left_join(pairs_neapolitan_final %>% select(c("GEOIDFQ", "name", "pizza_id", "time_min", "time_corrected")), by = join_by("GEOIDFQ" == "GEOIDFQ"))
+### Tavern
+census_blocks_tavern = census_block_shape %>% 
+  left_join(pairs_tavern_final %>% select(c("GEOIDFQ", "name", "pizza_id", "time_min", "time_corrected")), by = join_by("GEOIDFQ" == "GEOIDFQ"))
+### Thick
+census_blocks_thick = census_block_shape %>% 
+  left_join(pairs_thick_final %>% select(c("GEOIDFQ", "name", "pizza_id", "time_min", "time_corrected")), by = join_by("GEOIDFQ" == "GEOIDFQ"))
+### Apizza with corrected times for posterity
+census_blocks_apizza_corrected_time = census_block_shape %>% 
+  left_join(pairs_apizza_final_corrected_time %>% select(c("GEOIDFQ", "name", "pizza_id", "time_min", "time_corrected")), by = join_by("GEOIDFQ" == "GEOIDFQ"))
 
 # Make sure pizza id is factor
 census_blocks_apizza$pizza_id <- as.factor(census_blocks_apizza$pizza_id)
+census_blocks_apizza_corrected_time$pizza_id <- as.factor(census_blocks_apizza_corrected_time$pizza_id)
+
 
 # Map to take a peek
 ## Check number of apizza joints
@@ -1017,33 +1566,42 @@ num_distinct_pizzas <- length(levels(census_blocks_apizza$pizza_id))
 ## Define palette
 pizza_palette <- colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(num_distinct_pizzas)
 ## Map
-apizza_map_check_block = mapview(
+all_pizza_map_check_block = mapview(
   census_blocks_apizza,
   zcol = "pizza_id",            # Map colors directly based on your variable
   col.regions = pizza_palette,  # Apply the 32-color palette
   canvas = TRUE,                # Crucial performance boost for 49k+ census blocks
   legend = TRUE,                # Keeps the interactive legend active to toggle IDs
-  layer.name = "Pizza Zones"
+  layer.name = "Pizza Zones Raw"
 )
 
-apizza_map_check_shop = mapview(
+all_pizza_map_double_check_block = mapview(
+  census_blocks_apizza_corrected_time,
+  zcol = "pizza_id",            # Map colors directly based on your variable
+  col.regions = pizza_palette,  # Apply the 32-color palette
+  canvas = TRUE,                # Crucial performance boost for 49k+ census blocks
+  legend = TRUE,                # Keeps the interactive legend active to toggle IDs
+  layer.name = "Pizza Zones Corrected"
+)
+
+all_pizza_map_check_shop = mapview(
   apizza, 
   col.regions = "black",       # Color of the point icons
   cex = 5,                    # Size of the point icons
-  layer.name = "Apizza Shops"
+  layer.name = "Pizza Trail Shops"
 )
 
-apizza_map_check_block + apizza_map_check_shop
+all_pizza_map_check_block + all_pizza_map_double_check_block + all_pizza_map_check_shop
 ## Looking good! Some weirdness, but this is just a proof of concept so not worried
 
 # Dissolve on pizza ID
-census_blocks_apizza_dissolved = census_blocks_apizza %>% 
-  group_by(pizza_id, Name) %>% 
+census_blocks_all_dissolved = census_blocks_all %>% 
+  group_by(pizza_id, name) %>% 
   summarise()
 
 ## Map to see how it looks
-apizza_map_check_shape = mapview(
-  census_blocks_apizza_dissolved,
+all_pizza_map_check_shape = mapview(
+  census_blocks_all_dissolved,
   zcol = "pizza_id",            
   col.regions = pizza_palette,  
   canvas = TRUE,                
@@ -1051,82 +1609,164 @@ apizza_map_check_shape = mapview(
   layer.name = "Pizza Zones"
 )
 
-apizza_map_check_shape + apizza_map_check_shop
+all_pizza_map_check_shop_2 = mapview(
+  all_pizza,
+  col.regions = "black",       # Color of the point icons
+  cex = 5,                    # Size of the point icons
+  layer.name = "Pizza Trail Shops"
+)
 
-# For the Apizza Joints, make unique "Name, Town" labels for items that show up more than once
-## Check which
-census_blocks_apizza_dissolved %>% st_drop_geometry() %>%  group_by(Name) %>% tally()
-### Frank Pepe's, Grand Apizza, Sally's
-## Create variable
-census_blocks_apizza_dissolved = census_blocks_apizza_dissolved %>% 
-  mutate(name = case_when(
-    pizza_id == 7 ~ "Frank Pepe's, Stamford",
-    pizza_id == 18 ~ "Frank Pepe's, Fairfield",
-    pizza_id == 21 ~ "Frank Pepe's, Danbury",
-    pizza_id == 35 ~ "Frank Pepe's, Waterbury",
-    pizza_id == 47 ~ "Frank Pepe's, New Haven",
-    pizza_id == 86 ~ "Frank Pepe's, Uncasville",
-    pizza_id == 104 ~ "Frank Pepe's, Manchester",
-    pizza_id == 106 ~ "Frank Pepe's, West Hartford",
-    pizza_id == 74 ~ "Grand Apizza, Madison",
-    pizza_id == 76 ~ "Grand Apizza, Clinton",
-    pizza_id == 8 ~ "Sally's, Stamford",
-    pizza_id == 19 ~ "Sally's, Fairfield",
-    pizza_id == 51 ~ "Sally's, New Haven",
-    pizza_id == 65 ~ "Sally's, Farmington",
-    pizza_id == 11 ~ "Sally's, Wethersfield",
-    .default = Name
-  ))
+all_pizza_map_check_shape + all_pizza_map_check_shop_2
 
-apizza = apizza %>% 
-  mutate(name = case_when(
-    pizza_id == 7 ~ "Frank Pepe's, Stamford",
-    pizza_id == 18 ~ "Frank Pepe's, Fairfield",
-    pizza_id == 21 ~ "Frank Pepe's, Danbury",
-    pizza_id == 35 ~ "Frank Pepe's, Waterbury",
-    pizza_id == 47 ~ "Frank Pepe's, New Haven",
-    pizza_id == 86 ~ "Frank Pepe's, Uncasville",
-    pizza_id == 104 ~ "Frank Pepe's, Manchester",
-    pizza_id == 106 ~ "Frank Pepe's, West Hartford",
-    pizza_id == 74 ~ "Grand Apizza, Madison",
-    pizza_id == 76 ~ "Grand Apizza, Clinton",
-    pizza_id == 8 ~ "Sally's, Stamford",
-    pizza_id == 19 ~ "Sally's, Fairfield",
-    pizza_id == 51 ~ "Sally's, New Haven",
-    pizza_id == 65 ~ "Sally's, Farmington",
-    pizza_id == 111 ~ "Sally's, Wethersfield",
-    .default = Name
-  ))
+# Dissolve other layers
+## Apizza
+census_blocks_apizza_dissolved = census_blocks_apizza %>% 
+  group_by(pizza_id, name) %>% 
+  summarise()
+## Greek
+census_blocks_greek_dissolved = census_blocks_greek %>% 
+  group_by(pizza_id, name) %>% 
+  summarise()
+## Neapolitan
+census_blocks_neapolitan_dissolved = census_blocks_neapolitan %>% 
+  group_by(pizza_id, name) %>% 
+  summarise()
+## Tavern
+census_blocks_tavern_dissolved = census_blocks_tavern %>% 
+  group_by(pizza_id, name) %>% 
+  summarise()
+## Thick
+census_blocks_thick_dissolved = census_blocks_thick %>% 
+  group_by(pizza_id, name) %>% 
+  summarise()
+## Apizza with corrected time for posterity
+census_blocks_apizza_dissolved_corrected_time = census_blocks_apizza_corrected_time %>% 
+  group_by(pizza_id, name) %>% 
+  summarise()
 
 
 # Reproject zones
+census_blocks_all_dissolved = st_transform(census_blocks_all_dissolved, crs = 4326)
 census_blocks_apizza_dissolved = st_transform(census_blocks_apizza_dissolved, crs = 4326)
+census_blocks_greek_dissolved = st_transform(census_blocks_greek_dissolved, crs = 4326)
+census_blocks_neapolitan_dissolved = st_transform(census_blocks_neapolitan_dissolved, crs = 4326)
+census_blocks_tavern_dissolved = st_transform(census_blocks_tavern_dissolved, crs = 4326)
+census_blocks_thick_dissolved = st_transform(census_blocks_thick_dissolved, crs = 4326)
+census_blocks_apizza_dissolved_corrected_time = st_transform(census_blocks_apizza_dissolved_corrected_time, crs = 4326)
+
+# Check Maps
+## Apizza
+map_check_apizza = mapview(
+  census_blocks_apizza_dissolved,
+  zcol = "pizza_id",            
+  col.regions = pizza_palette,  
+  canvas = TRUE,                
+  legend = TRUE,                
+  layer.name = "Pizza Zones"
+)
+map_check_shop_apizza = mapview(
+  apizza, 
+  col.regions = "black",       # Color of the point icons
+  cex = 5,                    # Size of the point icons
+  layer.name = "Pizza Trail Shops"
+)
+map_check_apizza + map_check_shop_apizza
+## Greek
+map_check_greek = mapview(
+  census_blocks_greek_dissolved,
+  zcol = "pizza_id",            
+  col.regions = pizza_palette,  
+  canvas = TRUE,                
+  legend = TRUE,                
+  layer.name = "Pizza Zones"
+)
+map_check_shop_greek = mapview(
+  greek, 
+  col.regions = "black",       # Color of the point icons
+  cex = 5,                    # Size of the point icons
+  layer.name = "Pizza Trail Shops"
+)
+map_check_greek + map_check_shop_greek
+## Neapolitan
+map_check_neapolitan = mapview(
+  census_blocks_neapolitan_dissolved,
+  zcol = "pizza_id",            
+  col.regions = pizza_palette,  
+  canvas = TRUE,                
+  legend = TRUE,                
+  layer.name = "Pizza Zones"
+)
+map_check_shop_neapolitan = mapview(
+  neapolitan, 
+  col.regions = "black",       # Color of the point icons
+  cex = 5,                    # Size of the point icons
+  layer.name = "Pizza Trail Shops"
+)
+map_check_neapolitan + map_check_shop_neapolitan
+## Tavern
+map_check_tavern = mapview(
+  census_blocks_tavern_dissolved,
+  zcol = "pizza_id",            
+  col.regions = pizza_palette,  
+  canvas = TRUE,                
+  legend = TRUE,                
+  layer.name = "Pizza Zones"
+)
+map_check_shop_tavern = mapview(
+  tavern, 
+  col.regions = "black",       # Color of the point icons
+  cex = 5,                    # Size of the point icons
+  layer.name = "Pizza Trail Shops"
+)
+map_check_tavern + map_check_shop_tavern
+## Thick
+map_check_thick = mapview(
+  census_blocks_thick_dissolved,
+  zcol = "pizza_id",            
+  col.regions = pizza_palette,  
+  canvas = TRUE,                
+  legend = TRUE,                
+  layer.name = "Pizza Zones"
+)
+map_check_shop_thick = mapview(
+  thick, 
+  col.regions = "black",       # Color of the point icons
+  cex = 5,                    # Size of the point icons
+  layer.name = "Pizza Trail Shops"
+)
+map_check_thick + map_check_shop_thick
+## Apizza with corrected times for posterity
+map_check_apizza_corrected_time = mapview(
+  census_blocks_apizza_dissolved_corrected_time,
+  zcol = "pizza_id",            
+  col.regions = pizza_palette,  
+  canvas = TRUE,                
+  legend = TRUE,                
+  layer.name = "Pizza Zones"
+)
+map_check_apizza_corrected_time + map_check_shop_apizza
 
 ```
 
 ```{r final leaflet}
 
-# Define palette
-## determine which zones touch
-nb = st_intersects(census_blocks_apizza_dissolved)
-nb = lapply(seq_along(nb), \(i) setdiff(nb[[i]], i))
-
-## Determine number of colors needed, working out from zone w most borders
-ord = order(lengths(nb), decreasing = TRUE)
-col_id = rep(NA_integer_, nrow(census_blocks_apizza_dissolved))
-for (i in ord) {
-  used = col_id[nb[[i]]]
-  col_id[i] = min(setdiff(seq_len(length(nb[[i]]) + 1), used))
-}
-census_blocks_apizza_dissolved$col_id = col_id
-max(col_id)
-
-## Define palette
-pal = colorFactor(RColorBrewer::brewer.pal(max(3, max(col_id)), "Pastel1"),
-                  domain = census_blocks_apizza_dissolved$col_id)
+# API for map baselayer
+carto_key <- Sys.getenv("CARTO_MAPS_API_KEY")
 
 
-# Define specific pizza icon
+# Create leaflet map
+## Define layer groups
+layer_pairs = list(
+  "All Pizza Trail Pizza Shops" = list(zones = census_blocks_all_dissolved, shops = all_pizza),
+  "New Haven Style 'Apizza' Shops" = list(zones = census_blocks_apizza_dissolved, shops = apizza),
+  "New England Greek Style Pizza Shops" = list(zones = census_blocks_greek_dissolved, shops = greek),
+  "Neapolitan Style Pizza Shops" = list(zones = census_blocks_neapolitan_dissolved, shops = neapolitan),
+  "Tavern Style Pizza Shops" = list(zones = census_blocks_tavern_dissolved, shops = tavern),
+  "Thick Crust Pizza Shops" = list(zones = census_blocks_thick_dissolved, shops = thick)
+)
+
+
+## Define specific pizza icon
 pizza_icon = makeAwesomeIcon(
   text = "🍕"
 )
@@ -1137,28 +1777,182 @@ white_halo = paste("-1.5px -1.5px 0 white", " 1.5px -1.5px 0 white",
                    "-1.5px  0px 0 white", " 1.5px  0px 0 white",
                    sep = ", ")
 
+## Define emoji label options
+emoji_opts = labelOptions(
+  noHide = TRUE, direction = "center", textOnly = TRUE,
+  style = list("font-size" = "20px", "text-shadow" = white_halo)
+)
+
+## Define popups
+esc = \(x) htmltools::htmlEscape(dplyr::coalesce(as.character(x), ""))
+
+make_popup = function(d, include_style = FALSE) {
+  txt = sprintf("<b>Name:</b> %s<br><b>Address:</b> %s", esc(d$name), esc(d$address))
+  if (include_style) {
+    txt = paste0(txt, sprintf("<br><b>Style:</b> %s", esc(d$complete_type)))
+  }
+  txt
+}
+
+## Build palette
+### neighbor-coloring as a function so can apply to each layer
+color_zones = function(zones) {
+  zones = zones
+  nb = st_intersects(zones)
+  nb = lapply(seq_along(nb), \(i) setdiff(nb[[i]], i))
+  ord = order(lengths(nb), decreasing = TRUE)
+  col_id = rep(NA_integer_, nrow(zones))
+  for (i in ord) {
+    used = col_id[nb[[i]]]
+    col_id[i] = min(setdiff(seq_len(length(nb[[i]]) + 1), used))
+  }
+  zones$col_id = col_id
+  zones
+}
+
+### apply the zones to each layer set
+layer_pairs = lapply(layer_pairs, \(s) { s$zones = color_zones(s$zones); s })
+
+### create palette that covers all
+k = max(sapply(layer_pairs, \(s) max(s$zones$col_id)))
+k                                  # how many colors the worst set needed
+stopifnot(k <= 8)                  # Set2 tops out at 8 colors
+
+pal = colorFactor(RColorBrewer::brewer.pal(8, "Pastel1")[seq_len(k)],
+                  domain = seq_len(k))
+
+
+## Build map
+leaflet_map_overall = leaflet() %>% 
+  ### Extent: 
+  setView(-72.6915, 41.6032, 9) %>%
+  ### Base: based on [this site](https://leaflet-extras.github.io/leaflet-providers/preview/index.html) I like Stadia Outdoors best (among free, no registration options)
+  addTiles(
+    urlTemplate = paste0("https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=", carto_key),
+    attribution = '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> contributors &copy; <a href="https://carto.com">CARTO</a>'
+  )
+  
+for (nm in names(layer_pairs)) {
+  s = layer_pairs[[nm]]
+  leaflet_map_overall = leaflet_map_overall %>%
+    ### Add polygons for each zone group
+    addPolygons(data = s$zones, group = nm,
+                fillColor = ~pal(col_id), fillOpacity = 0.5,
+                color = "grey", weight = 0.5, label = ~name,
+                highlightOptions = highlightOptions(weight = 3)) %>%
+    ### emoji with white halo
+    addLabelOnlyMarkers(data = s$shops, group = nm,
+                        label = rep("🍕", nrow(s$shops)),
+                        labelOptions = emoji_opts) %>%
+    ### invisible hit area carrying the shop-name hover label
+    addCircleMarkers(data = s$shops, group = nm, radius = 10,
+                     stroke = FALSE, fillOpacity = 0, label = ~name,
+                     popup = make_popup(s$shops, include_style = (nm == "All Pizza Trail Pizza Shops")))
+}
+### make it so that only one set of layers shows upn at a time
+leaflet_map_overall = leaflet_map_overall %>%
+  addLayersControl(baseGroups = names(layer_pairs),
+                   options = layersControlOptions(collapsed = FALSE)) %>%
+  hideGroup(names(layer_pairs)[-1])
+
+
+# # Create leaflet map
+# ## All
+# leaflet_map_all = leaflet(census_blocks_all_dissolved) %>% 
+#   ### Extent: 
+#   setView(-72.6915, 41.6032, 9) %>% 
+#   ### Base: based on [this site](https://leaflet-extras.github.io/leaflet-providers/preview/index.html) I like Jawg Streets best
+#   addProviderTiles(providers$Stadia.Outdoors) %>% 
+#   ### Define polygon style (palette defined earlier, mid opacity, think grey line, name as label)
+#   addPolygons(fillColor = ~pal_all(col_id), fillOpacity = 0.7,
+#               color = "grey", weight = 0.5, 
+#               label = ~name,
+#               highlightOptions = highlightOptions(weight = 3, bringToFront = FALSE)) %>% 
+#   ### Add markers for shops and style
+#     # addCircleMarkers(data = apizza, radius = 11,
+#     #                fillColor = "white", fillOpacity = 1,
+#     #                color = "grey50", weight = 3,
+#     #                label = ~name) %>%
+#   addLabelOnlyMarkers(data = all_pizza, label = rep("🍕", nrow(all_pizza)),
+#                       labelOptions = labelOptions(
+#                         noHide = TRUE, direction = "center", textOnly = TRUE,
+#                         style = list("font-size" = "16px",
+#                                      "text-shadow" = white_halo)))
+
+# Write out leaflet map
+saveWidget(leaflet_map_overall,
+           file = paste0(output_dir, "/Pizza Trail Leaflet Map.html"),
+           selfcontained = FALSE,
+           title = "CT Pizza Trail Map",
+           libdir = "map_assets")
+
+
+```
+
+```{r leaflet corrected vs raw comparison}
+
 # Create leaflet map
-leaflet_map = leaflet(census_blocks_apizza_dissolved) %>% 
-  ## Extent: 
-  setView(-72.6915, 41.6032, 9) %>% 
-  ## Base: based on [this site](https://leaflet-extras.github.io/leaflet-providers/preview/index.html) I like Jawg Streets best
-  addProviderTiles(providers$Stadia.Outdoors) %>% 
-  ## Define polygon style (palette defined earlier, mid opacity, think grey line, name as label)
-  addPolygons(fillColor = ~pal(col_id), fillOpacity = 0.7,
-              color = "grey", weight = 0.5, 
-              label = ~name,
-              highlightOptions = highlightOptions(weight = 3, bringToFront = FALSE)) %>% 
-  ## Add markers for shops and style
-    # addCircleMarkers(data = apizza, radius = 11,
-    #                fillColor = "white", fillOpacity = 1,
-    #                color = "grey50", weight = 3,
-    #                label = ~name) %>%
-  addLabelOnlyMarkers(data = apizza, label = rep("🍕", nrow(apizza)),
-                      labelOptions = labelOptions(
-                        noHide = TRUE, direction = "center", textOnly = TRUE,
-                        style = list("font-size" = "16px",
-                                     "text-shadow" = white_halo)))
+## Define layer groups
+layer_pairs_apizza_comp = list(
+  "Apizza with Raw Times" = list(zones = census_blocks_apizza_dissolved, shops = apizza),
+  "Apizza with Corrected Times" = list(zones = census_blocks_apizza_dissolved_corrected_time, shops = apizza)
+)
+
+## Build palette
+### neighbor-coloring as a function so can apply to each layer
+#### Already defined in previous block
+
+### apply the zones to each layer set
+layer_pairs_apizza_comp = lapply(layer_pairs_apizza_comp, \(s) { s$zones = color_zones(s$zones); s })
+
+### create palette that covers all
+k = max(sapply(layer_pairs_apizza_comp, \(s) max(s$zones$col_id)))
+k                                  # how many colors the worst set needed
+stopifnot(k <= 8)                  # Set2 tops out at 8 colors
+
+pal = colorFactor(RColorBrewer::brewer.pal(8, "Pastel1")[seq_len(k)],
+                  domain = seq_len(k))
 
 
+## Build map
+leaflet_map_apizza_comp = leaflet() %>% 
+  ### Extent: 
+  setView(-72.6915, 41.6032, 9) %>%
+  ### Base: based on [this site](https://leaflet-extras.github.io/leaflet-providers/preview/index.html) I like Stadia Outdoors best (among free, no registration options)
+  addTiles(
+    urlTemplate = paste0("https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=", carto_key),
+    attribution = '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> contributors &copy; <a href="https://carto.com">CARTO</a>'
+  )
+
+for (nm in names(layer_pairs_apizza_comp)) {
+  s = layer_pairs_apizza_comp[[nm]]
+  leaflet_map_apizza_comp = leaflet_map_apizza_comp %>%
+    ### Add polygons for each zone group
+    addPolygons(data = s$zones, group = nm,
+                fillColor = ~pal(col_id), fillOpacity = 0.5,
+                color = "grey", weight = 0.5, label = ~name,
+                highlightOptions = highlightOptions(weight = 3)) %>%
+    ### emoji with white halo
+    addLabelOnlyMarkers(data = s$shops, group = nm,
+                        label = rep("🍕", nrow(s$shops)),
+                        labelOptions = emoji_opts) %>%
+    ### invisible hit area carrying the shop-name hover label
+    addCircleMarkers(data = s$shops, group = nm, radius = 10,
+                     stroke = FALSE, fillOpacity = 0, label = ~name,
+                     popup = make_popup(s$shops, include_style = (nm == "All Pizza Trail Pizza Shops")))
+}
+### make it so that only one set of layers shows upn at a time
+leaflet_map_apizza_comp = leaflet_map_apizza_comp %>%
+  addLayersControl(baseGroups = names(layer_pairs_apizza_comp),
+                   options = layersControlOptions(collapsed = FALSE)) %>%
+  hideGroup(names(layer_pairs_apizza_comp)[-1])
+
+
+# Write out leaflet map
+saveWidget(leaflet_map_apizza_comp,
+           file = paste0(output_dir, "/Pizza Trail Apizza Comparison Leaflet Map.html"),
+           selfcontained = FALSE,
+           title = "CT Pizza Trail Time Comparison Map",
+           libdir = "map_assets")
 
 ```
