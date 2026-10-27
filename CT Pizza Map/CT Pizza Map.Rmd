@@ -497,7 +497,8 @@ connectors = st_read(file.path('Overture Roads Outputs', 'Overture Connectors.gp
 ## Read in Pizza joints
 all_pizza = st_read(paste0(project_dir, "All Pizza Shops.gpkg"))
 apizza = st_read(paste0(project_dir, "Apizza Pizza Shops.gpkg"))
-greek = st_read(paste0(project_dir, "Greek Pizza Shops.gpkg"))
+greek = st_read(paste0(project_dir, "Greek Pizza Shops.gpkg")) %>% 
+  mutate(formatted_ = case_when(Name == "Village Pizza of Wethersfield" ~ "233 Main Street, Wethersfield, CT, 06109, USA", .default = formatted_))
 neapolitan = st_read(paste0(project_dir, "Neapolitan Pizza Shops.gpkg"))
 tavern = st_read(paste0(project_dir, "Tavern Pizza Shops.gpkg"))
 thick = st_read(paste0(project_dir, "Thick Pizza Shops.gpkg"))
@@ -507,9 +508,11 @@ census_blocks = st_read(paste0(project_dir, "tl_2025_09_bg/tl_2025_09_bg.shp"))
 census_block_shape = st_read(paste0(project_dir, "tl_2025_09_bg/tl_2025_09_bg.shp"))
 
 ## Read in correspondence table
-blocks_all = read.csv(paste0(project_dir, "Block Groups with Pizza Joints.csv"), header = TRUE, check.names=FALSE)
+blocks_all = read.csv(paste0(project_dir, "Block Groups with Pizza Joints.csv"), header = TRUE, check.names=FALSE) %>% 
+  mutate(formatted_ = case_when(Name == "Village Pizza of Wethersfield" ~ "233 Main Street, Wethersfield, CT, 06109, USA", .default = formatted_))
 blocks_apizza = read.csv(paste0(project_dir, "Block Groups with Apizza Joints.csv"), header = TRUE, check.names=FALSE)
-blocks_greek = read.csv(paste0(project_dir, "Block Groups with Greek Joints.csv"), header = TRUE, check.names=FALSE)
+blocks_greek = read.csv(paste0(project_dir, "Block Groups with Greek Joints.csv"), header = TRUE, check.names=FALSE) %>% 
+  mutate(formatted_ = case_when(Name == "Village Pizza of Wethersfield" ~ "233 Main Street, Wethersfield, CT, 06109, USA" , .default = formatted_))
 blocks_neapolitan = read.csv(paste0(project_dir, "Block Groups with Neapolitan Joints.csv"), header = TRUE, check.names=FALSE)
 blocks_tavern = read.csv(paste0(project_dir, "Block Groups with Tavern Joints.csv"), header = TRUE, check.names=FALSE)
 blocks_thick = read.csv(paste0(project_dir, "Block Groups with Thick Joints.csv"), header = TRUE, check.names=FALSE)
